@@ -1,20 +1,26 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import GACIODCard, { formatForAI } from '@/components/GACIODCard';
 import Chat, { Message, Improvement, Modification } from '@/components/Chat';
-
-interface GACIODContent {
-  title: string;
-  goals: string;
-  assumptions: string;
-  constraints: string;
-  ideas: string;
-  opinions: string;
-  decisions: string;
-}
+import ChatSidebar from '@/components/ChatSidebar';
+import {
+  GACIODContent,
+  ChatSession,
+  createSession,
+  loadSessions,
+  saveSession,
+  deleteSession as deleteStoredSession,
+  loadActiveSessionId,
+  saveActiveSessionId,
+  deriveTitle,
+} from '@/lib/chatStorage';
 
 export default function Home() {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+
   const [content, setContent] = useState<GACIODContent>({
     title: '',
     goals: '',
@@ -32,6 +38,110 @@ export default function Home() {
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [context, setContext] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
+
+  // Load sessions from localStorage on mount
+  useEffect(() => {
+    const stored = loadSessions();
+    if (stored.length > 0) {
+      setSessions(stored);
+      const savedId = loadActiveSessionId();
+      const target = savedId && stored.find(s => s.id === savedId) ? savedId : stored[0].id;
+      setActiveSessionId(target);
+      const session = stored.find(s => s.id === target)!;
+      setContent(session.content);
+      setMessages(session.messages);
+      setContext(session.context);
+    } else {
+      const first = createSession();
+      setSessions([first]);
+      setActiveSessionId(first.id);
+      saveSession(first);
+      saveActiveSessionId(first.id);
+    }
+  }, []);
+
+  // Persist active session whenever content, messages, or context change
+  const persistCurrentSession = useCallback(() => {
+    if (!activeSessionId) return;
+    const updated: ChatSession = {
+      id: activeSessionId,
+      title: deriveTitle({ id: activeSessionId, title: '', messages, content, context, createdAt: 0, updatedAt: 0 }),
+      messages,
+      content,
+      context,
+      createdAt: sessions.find(s => s.id === activeSessionId)?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    saveSession(updated);
+    setSessions(prev => {
+      const idx = prev.findIndex(s => s.id === activeSessionId);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      }
+      return [updated, ...prev];
+    });
+  }, [activeSessionId, content, messages, context, sessions]);
+
+  useEffect(() => {
+    persistCurrentSession();
+  }, [content, messages, context]);
+
+  const handleNewChat = () => {
+    const newSession = createSession();
+    saveSession(newSession);
+    setSessions(prev => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+    saveActiveSessionId(newSession.id);
+    setContent(newSession.content);
+    setMessages(newSession.messages);
+    setContext(newSession.context);
+    setInputValue('');
+    setChatSidebarOpen(false);
+  };
+
+  const handleSelectSession = (id: string) => {
+    if (id === activeSessionId) {
+      setChatSidebarOpen(false);
+      return;
+    }
+    const session = sessions.find(s => s.id === id);
+    if (!session) return;
+    setActiveSessionId(id);
+    saveActiveSessionId(id);
+    setContent(session.content);
+    setMessages(session.messages);
+    setContext(session.context);
+    setInputValue('');
+    setChatSidebarOpen(false);
+  };
+
+  const handleDeleteSession = (id: string) => {
+    deleteStoredSession(id);
+    const remaining = sessions.filter(s => s.id !== id);
+    if (remaining.length === 0) {
+      const fresh = createSession();
+      saveSession(fresh);
+      setSessions([fresh]);
+      setActiveSessionId(fresh.id);
+      saveActiveSessionId(fresh.id);
+      setContent(fresh.content);
+      setMessages(fresh.messages);
+      setContext(fresh.context);
+    } else {
+      setSessions(remaining);
+      if (id === activeSessionId) {
+        const next = remaining[0];
+        setActiveSessionId(next.id);
+        saveActiveSessionId(next.id);
+        setContent(next.content);
+        setMessages(next.messages);
+        setContext(next.context);
+      }
+    }
+    setInputValue('');
+  };
 
   const updateContent = (key: keyof GACIODContent, value: string) => {
     setContent({ ...content, [key]: value });
@@ -282,6 +392,42 @@ export default function Home() {
     }
   };
 
+  const handleExportData = () => {
+    try {
+      // Load all sessions from localStorage (non-destructive read)
+      const allSessions = loadSessions();
+      const activeId = loadActiveSessionId();
+
+      // Create export object with metadata
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        exportedTimestamp: Date.now(),
+        activeSessionId: activeId,
+        totalSessions: allSessions.length,
+        sessions: allSessions,
+      };
+
+      // Convert to JSON string
+      const dataStr = JSON.stringify(exportData, null, 2);
+
+      // Create blob and download
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `gasel-chat-export-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log(`[Export] Successfully exported ${allSessions.length} sessions`);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please check the console for details.');
+    }
+  };
+
   const handleSendMessage = async (text: string) => {
     // Add user message
     const newMessage: Message = {
@@ -500,135 +646,108 @@ export default function Home() {
   }, [messages, content]);
 
   return (
-    <div className="h-screen bg-[#E8EDF2] flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="h-12 sm:h-14 bg-white border-b border-gray-200 flex items-center px-4 sm:px-6 flex-shrink-0">
-        <h1 className="text-base sm:text-lg font-semibold text-gray-800">Gasel</h1>
+    <div className="h-screen bg-[#E8EDF2] flex flex-row overflow-hidden">
+      {/* Chat history sidebar - persistent, inline */}
+      <ChatSidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onNewChat={handleNewChat}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
+        isOpen={chatSidebarOpen}
+        onToggle={() => setChatSidebarOpen(!chatSidebarOpen)}
+        onOpenSettings={() => setShowDebugMenu(!showDebugMenu)}
+      />
 
-        {/* Toggle sidebar button - visible on smaller screens */}
-        <button
-          onClick={() => setShowSidebar(!showSidebar)}
-          className="ml-auto mr-2 lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          aria-label={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
-            />
-          </svg>
-        </button>
-
-        {/* Debug Menu */}
-        <div className={`${showSidebar ? '' : 'ml-auto'} lg:ml-auto relative`}>
-          <button
-            onClick={() => setShowDebugMenu(!showDebugMenu)}
-            className="px-2 sm:px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 sm:gap-2"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-4 h-4"
+      {/* Settings popover - triggered from sidebar */}
+      {/* {showDebugMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowDebugMenu(false)} />
+          <div className="fixed left-14 bottom-4 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
+            <button
+              onClick={() => {
+                handleGenerateSample();
+                setShowDebugMenu(false);
+              }}
+              disabled={isGeneratingSample}
+              className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-            <span className="hidden sm:inline">Settings</span>
-          </button>
+              {isGeneratingSample ? (
+                <>
+                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                  </svg>
+                  Generate Sample
+                </>
+              )}
+            </button>
+          </div>
+        </>
+      )} */}
 
-          {showDebugMenu && (
-            <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-10">
-              <div>
-                <button
-                  onClick={() => {
-                    handleGenerateSample();
-                    setShowDebugMenu(false);
-                  }}
-                  disabled={isGeneratingSample}
-                  className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isGeneratingSample ? (
-                    <>
-                      <svg
-                        className="animate-spin h-3 w-3"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
-                        />
-                      </svg>
-                      Generate Sample
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </header>
-
+      {/* Main area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Main content */}
       <div className="flex-1 flex flex-col lg:flex-row p-3 sm:p-4 lg:p-6 gap-3 sm:gap-4 lg:gap-6 min-h-0 overflow-hidden">
         {/* Left side - GACIOD cards */}
         <div className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 min-w-0 min-h-0 overflow-hidden">
-          {/* Topic/Question input */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-1 flex-shrink-0">
-            <input
-              type="text"
-              value={content.title}
-              onChange={(e) => setContent({ ...content, title: e.target.value })}
-              placeholder="Question or Topic (e.g. What are some mechanics we need to consider for a matchmaking algorithm?)"
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm font-normal text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-400 placeholder:font-normal"
-            />
+          {/* Title row */}
+          <div className="flex items-stretch gap-2 sm:gap-3 flex-shrink-0">
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center flex-shrink-0">
+              <h1 className="text-sm sm:text-base font-bold text-black-500 whitespace-nowrap">Gasel</h1>
+            </div>
+            <div className="flex-1 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center px-3 sm:px-4">
+              <input
+                type="text"
+                value={content.title}
+                onChange={(e) => setContent({ ...content, title: e.target.value })}
+                placeholder="Question or Topic (e.g. What are some mechanics we need to consider for a matchmaking algorithm?)"
+                className="w-full py-2.5 text-sm font-normal text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-400 placeholder:font-normal"
+              />
+            </div>
+            <button
+              className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span className="text-xs sm:text-sm font-medium hidden sm:inline">Save</span>
+            </button>
+            <button
+              className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+              </svg>
+              <span className="text-xs sm:text-sm font-medium hidden sm:inline">Save As</span>
+            </button>
+            <button
+              onClick={handleExportData}
+              className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0"
+              title="Export all chat data as JSON"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span className="text-xs sm:text-sm font-medium hidden sm:inline">Export</span>
+            </button>
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="lg:hidden bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 flex items-center text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0"
+              aria-label={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+              </svg>
+            </button>
           </div>
 
           {/* GACIOD Grid */}
@@ -794,6 +913,7 @@ export default function Home() {
           </div>
         </div>
       </div>
+      </div>{/* end main area */}
     </div>
   );
 }
