@@ -8,6 +8,7 @@ export interface Improvement {
   originalText: string;
   newText: string;
   explanation?: string;
+  status?: 'pending' | 'accepted' | 'denied';
 }
 
 export type ModificationOperation = 'ADD' | 'UPDATE' | 'DELETE';
@@ -19,6 +20,7 @@ export interface Modification {
   currentText?: string;
   newText?: string;
   explanation: string;
+  status?: 'pending' | 'accepted' | 'denied';
 }
 
 export interface Message {
@@ -407,26 +409,30 @@ export default function Chat({
           messages.map((message) => (
             <div
               key={message.id}
-              className={`flex flex-col ${
-                message.sender === 'user' ? 'items-end' : 'items-start'
+              className={`flex ${
+                message.sender === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
-              <div className="w-full max-w-full flex flex-col gap-1">
+              <div className={`flex flex-col gap-1 ${
+                message.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-full'
+              }`}>
                 {message.isStructured ? (
                   <div className="w-full">
                     <StructuredMessage text={message.text} />
                   </div>
                 ) : (
                   <div
-                    className={`max-w-[85%] break-words ${
+                    className={`break-words ${
+                      message.sender === 'user' ? '' : 'max-w-[85%]'
+                    } ${
                       message.isQuote
                         ? 'border-l-4 border-gray-400 pl-4 py-2'
                         : `px-3 py-2 rounded-lg ${
                             message.sender === 'user'
-                              ? 'bg-gray-900 text-white'
+                              ? 'bg-gray-900 text-white rounded-br-sm'
                               : message.sender === 'system'
                               ? 'bg-gray-100 text-gray-700 border border-gray-200'
-                              : 'bg-gray-100 text-gray-900'
+                              : 'bg-gray-100 text-gray-900 rounded-bl-sm'
                           }`
                     }`}
                   >
@@ -444,29 +450,57 @@ export default function Chat({
                   </div>
                 )}
                 {/* Improvement cards */}
-                {message.improvements && message.improvements.length > 0 && onAcceptImprovement && onDenyImprovement && (
-                  <div className="w-full space-y-2 mt-2">
-                    {message.improvements.map((improvement, idx) => (
-                      <ImprovementCard
-                        key={idx}
-                        improvement={improvement}
-                        onAccept={onAcceptImprovement}
-                        onDeny={() => onDenyImprovement(message.id, idx)}
-                      />
-                    ))}
+                {message.improvements && message.improvements.length > 0 && (
+                  <div className="w-full space-y-2 mt-1">
+                    {message.improvements.map((improvement, idx) => {
+                      const status = improvement.status ?? 'pending';
+                      if (status === 'pending' && onAcceptImprovement && onDenyImprovement) {
+                        return (
+                          <ImprovementCard
+                            key={idx}
+                            improvement={improvement}
+                            onAccept={onAcceptImprovement}
+                            onDeny={() => onDenyImprovement(message.id, idx)}
+                          />
+                        );
+                      }
+                      return (
+                        <div key={idx} className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
+                          status === 'accepted' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'
+                        }`}>
+                          <span>{status === 'accepted' ? '✓' : '✗'}</span>
+                          <span className="font-semibold">{status === 'accepted' ? 'Accepted' : 'Denied'}:</span>
+                          <span>{improvement.category} improvement</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {/* Modification cards */}
-                {message.modifications && message.modifications.length > 0 && onAcceptModification && onDenyModification && (
-                  <div className="w-full space-y-2 mt-2">
-                    {message.modifications.map((modification, idx) => (
-                      <ModificationCard
-                        key={idx}
-                        modification={modification}
-                        onAccept={onAcceptModification}
-                        onDeny={() => onDenyModification(message.id, idx)}
-                      />
-                    ))}
+                {message.modifications && message.modifications.length > 0 && (
+                  <div className="w-full space-y-2 mt-1">
+                    {message.modifications.map((modification, idx) => {
+                      const status = modification.status ?? 'pending';
+                      if (status === 'pending' && onAcceptModification && onDenyModification) {
+                        return (
+                          <ModificationCard
+                            key={idx}
+                            modification={modification}
+                            onAccept={onAcceptModification}
+                            onDeny={() => onDenyModification(message.id, idx)}
+                          />
+                        );
+                      }
+                      return (
+                        <div key={idx} className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
+                          status === 'accepted' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'
+                        }`}>
+                          <span>{status === 'accepted' ? '✓' : '✗'}</span>
+                          <span className="font-semibold">{status === 'accepted' ? 'Accepted' : 'Denied'}:</span>
+                          <span>{modification.operation} in {modification.category}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -511,13 +545,13 @@ export default function Chat({
 
         {/* Quick action cards - only show if showActionsInline is true */}
         {showActionsInline && (
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="grid grid-cols-3 gap-1.5 mt-3">
             <button
               onClick={() => {
                 onSendMessage('Review my GACIOD framework');
               }}
               disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-2 aspect-square"
+              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -525,7 +559,7 @@ export default function Chat({
                 viewBox="0 0 24 24"
                 strokeWidth={1.5}
                 stroke="currentColor"
-                className="w-5 h-5 text-blue-600"
+                className="w-3.5 h-3.5 text-blue-600 shrink-0"
               >
                 <path
                   strokeLinecap="round"
@@ -533,14 +567,14 @@ export default function Chat({
                   d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
                 />
               </svg>
-              <p className="text-xs font-medium text-gray-600 text-center">Review</p>
+              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Review</span>
             </button>
             <button
               onClick={() => {
                 onSendMessage('Find gaps in my GACIOD framework');
               }}
               disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-2 aspect-square"
+              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -548,7 +582,7 @@ export default function Chat({
                 viewBox="0 0 24 24"
                 strokeWidth={1.5}
                 stroke="currentColor"
-                className="w-5 h-5 text-orange-600"
+                className="w-3.5 h-3.5 text-orange-600 shrink-0"
               >
                 <path
                   strokeLinecap="round"
@@ -556,14 +590,14 @@ export default function Chat({
                   d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6"
                 />
               </svg>
-              <p className="text-xs font-medium text-gray-600 text-center">Find Gaps</p>
+              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Gaps</span>
             </button>
             <button
               onClick={() => {
                 onSendMessage('Suggest improvements for my GACIOD framework');
               }}
               disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-2 aspect-square"
+              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -571,7 +605,7 @@ export default function Chat({
                 viewBox="0 0 24 24"
                 strokeWidth={1.5}
                 stroke="currentColor"
-                className="w-5 h-5 text-green-600"
+                className="w-3.5 h-3.5 text-green-600 shrink-0"
               >
                 <path
                   strokeLinecap="round"
@@ -579,7 +613,7 @@ export default function Chat({
                   d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
                 />
               </svg>
-              <p className="text-xs font-medium text-gray-600 text-center">Improve</p>
+              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Improve</span>
             </button>
           </div>
         )}

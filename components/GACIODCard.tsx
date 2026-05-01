@@ -126,9 +126,9 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 h-full flex flex-col">
-      <h3 className="text-sm font-semibold text-gray-800 mb-3">{title}</h3>
-      <div className="flex-1 overflow-y-auto space-y-1">
+    <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 h-full flex flex-col min-h-0 overflow-hidden">
+      <h3 className="text-sm font-semibold text-gray-800 mb-3 shrink-0">{title}</h3>
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
         {items.map((item, index) => {
           const isHighlighted = highlightedIndices.includes(index);
           return (

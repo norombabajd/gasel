@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { neonAuth } from '@neondatabase/auth/next/server';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -170,6 +171,11 @@ CRITICAL RULES:
 
 export async function POST(req: NextRequest) {
   try {
+    const { user } = await neonAuth();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { messages, gacIODContext, formattedGACIOD, additionalContext } = await req.json();
 
     const baseContext = buildBaseContext(gacIODContext, formattedGACIOD, additionalContext);

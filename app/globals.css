@@ -1,11 +1,28 @@
 @import "tailwindcss";
+@import "@neondatabase/auth/ui/tailwind";
 
+/*
+ * Force dark: variant to use class-based strategy.
+ * Since we never add .dark to <html>, this effectively disables
+ * all dark: Tailwind utilities (including Neon Auth's).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Force light mode regardless of system preference */
 :root {
+  color-scheme: light;
   --background: #E8EDF2;
   --foreground: #171717;
   --card-background: #ffffff;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   --card-border-radius: 12px;
+}
+
+/* Prevent any dark mode from activating via prefers-color-scheme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: light;
+  }
 }
 
 @theme inline {
