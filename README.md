@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gasel
+
+![screenshot of the gasel tool](public/screenshot.png)
+
+A research project on AI, Creativity, and design decision making at the University of California, Irvine. 
+
+Gasel guides students through structured software-design analysis using Generative AI & the GACIOD Framework, created by Andre van der Hoek for the use of teaching Software Design I at UC Irvine. GACIOD stands for Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Database**: PostgreSQL on [Neon](https://neon.tech) with Drizzle ORM
+- **Auth**: Neon Auth (email OTP)
+- **AI**: OpenAI GPT-5-mini
+- **Styling**: Tailwind CSS 4
+
+## Features
+
+- **GACIOD Matrix Management** — Create and manage structured analysis sessions with items across six categories
+- **Four AI Interaction Modes**:
+  - **Generate** — Create, update, or delete GACIOD items
+  - **Insight** — Get feedback and analysis on your matrix
+  - **Critique** — Identify gaps, conflicts, and weaknesses
+  - **Improve** — Strengthen existing items with refined alternatives
+- **Session Persistence** — All sessions, items, and chat history saved to PostgreSQL
+- **Import/Export** — Share or back up your sessions
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 18+
+- A [Neon](https://neon.tech) database
+- An [OpenAI](https://platform.openai.com) API key
+
+### Environment Variables
+
+Create a `.env.local` file:
+
+```env
+DATABASE_URL=postgresql://...
+OPENAI_API_KEY=sk-proj-...
+NEON_AUTH_BASE_URL=https://...
+NEON_AUTH_COOKIE_SECRET=...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npx drizzle-kit push    # apply database schema
+npm run dev              # start dev server at http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+app/
+├── page.tsx              # Home — lists all sessions
+├── HomeClient.tsx        # Main client component (state management hub)
+├── actions.ts            # Server actions for DB operations
+├── db/
+│   ├── schema.ts         # Drizzle schema (matrices, items, conversations)
+│   └── index.ts          # DB client
+├── api/
+│   ├── chat/route.ts     # OpenAI chat endpoint (4 AI modes)
+│   └── auth/[...path]/   # Neon Auth handlers
+└── auth/[path]/          # Auth UI pages
 
-To learn more about Next.js, take a look at the following resources:
+components/
+├── Chat.tsx              # Chat interface with structured response rendering
+├── ChatSidebar.tsx       # Session switcher
+├── GACIODCard.tsx        # Matrix display
+├── EditableTable.tsx     # Inline-editable matrix table
+└── SuggestionsTimeline.tsx  # AI suggestion timeline
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+lib/
+├── auth/                 # Neon Auth client/server helpers
+└── chatStorage.ts        # Chat history utilities
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Database Schema
 
-## Deploy on Vercel
+| Table | Purpose |
+|-------|---------|
+| `matrices` | GACIOD sessions (title, question, context) |
+| `matrix_items` | Individual items per category with sort order |
+| `conversations` | Chat messages with sequence tracking |
+| `user_roles` | Role assignments (future RBAC) |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
