@@ -368,22 +368,27 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     });
 
     // Always mark the modification status, even if content application failed
+    // Use a flag to only mark the first matching pending modification
     setMessages((prev) =>
       prev.map((msg) => {
         if (msg.modifications) {
+          let found = false;
           const newModifications = msg.modifications.map((mod) => {
-            if (category === 'title') {
-              return mod.operation === modification.operation &&
+            if (found) return mod;
+            const isMatch = category === 'title'
+              ? mod.operation === modification.operation &&
                 mod.category === modification.category &&
                 mod.newText === modification.newText
-                ? { ...mod, status: 'accepted' as const }
-                : mod;
+              : mod.label === modification.label &&
+                mod.operation === modification.operation &&
+                mod.category === modification.category &&
+                mod.newText === modification.newText &&
+                mod.currentText === modification.currentText;
+            if (isMatch && (mod.status ?? 'pending') === 'pending') {
+              found = true;
+              return { ...mod, status: 'accepted' as const };
             }
-            return mod.label === modification.label &&
-              mod.operation === modification.operation &&
-              mod.category === modification.category
-              ? { ...mod, status: 'accepted' as const }
-              : mod;
+            return mod;
           });
           return { ...msg, modifications: newModifications };
         }
