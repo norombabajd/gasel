@@ -1,6 +1,38 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import type { TablerIcon } from '@tabler/icons-react';
+import {
+  IconPencil,
+  IconEye,
+  IconEyeOff,
+  IconArchive,
+  IconArchiveOff,
+  IconX,
+} from '@tabler/icons-react';
+
+export type AccentColor =
+  | 'green'
+  | 'amber'
+  | 'red'
+  | 'violet'
+  | 'orange'
+  | 'blue'
+  | 'yellow';
+
+// Static class strings per accent (Tailwind cannot resolve runtime-built names).
+const ACCENT: Record<
+  AccentColor,
+  { border: string; title: string; icon: string; link: string }
+> = {
+  green: { border: 'border-emerald-200', title: 'text-emerald-600', icon: 'text-emerald-500', link: 'text-emerald-600 hover:text-emerald-700' },
+  amber: { border: 'border-[#E8B84B]/45', title: 'text-[#E8B84B]', icon: 'text-[#E8B84B]', link: 'text-[#E8B84B] hover:opacity-80' },
+  red: { border: 'border-[#E07070]', title: 'text-[#E07070]', icon: 'text-[#E07070]', link: 'text-[#E07070] hover:text-red-600' },
+  violet: { border: 'border-[#AB6FD4]', title: 'text-[#AB6FD4]', icon: 'text-[#AB6FD4]', link: 'text-[#AB6FD4] hover:text-violet-700' },
+  orange: { border: 'border-[#E8834A]', title: 'text-[#E8834A]', icon: 'text-[#E8834A]', link: 'text-[#E8834A] hover:text-orange-700' },
+  blue: { border: 'border-[#4A8FD4]', title: 'text-[#4A8FD4]', icon: 'text-[#4A8FD4]', link: 'text-[#4A8FD4] hover:text-blue-700' },
+  yellow: { border: 'border-[#E8B84B]', title: 'text-[#E8B84B]', icon: 'text-[#E8B84B]', link: 'text-[#E8B84B] hover:text-yellow-700' },
+};
 
 interface GACIODCardProps {
   title: string;
@@ -8,62 +40,94 @@ interface GACIODCardProps {
   onUpdate: (content: string) => void;
   highlightedText?: string;
   highlightedIndices?: number[];
+  color: AccentColor;
+  icon: TablerIcon;
+  subtitle: string;
+  prefix: string;
+  singular: string;
+  plural: string;
+  archivedContent?: string;
+  onArchive?: (index: number) => void;
+  onUnarchive?: (index: number) => void;
 }
 
-// Get prefix from title (G for Goals, A for Assumptions, etc.)
-const getPrefix = (title: string): string => {
-  const prefixMap: Record<string, string> = {
-    'Goals': 'G',
-    'Assumptions': 'A',
-    'Constraints': 'C',
-    'Ideas': 'I',
-    'Opinions': 'O',
-    'Decisions': 'D',
-  };
-  return prefixMap[title] || title.charAt(0).toUpperCase();
-};
+// Strip an accidental label prefix (e.g. "C-01: ") that may have been baked
+// into the item text — the label is rendered separately from the badge.
+const stripLabel = (line: string): string =>
+  line.replace(/^\s*[GACIOD]-\d{2}:\s*/, '');
 
 // Parse content into list items (each line is an item)
 const parseItems = (content: string): string[] => {
   if (!content.trim()) return [];
-  return content.split('\n').filter(line => line.trim() !== '');
+  return content
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(stripLabel);
 };
 
 // Format item number with leading zero
 const formatNumber = (num: number): string => {
-  return num.toString().padStart(2, '0');
+  return num.toString();
 };
 
-export default function GACIODCard({ title, content, onUpdate, highlightedText, highlightedIndices = [] }: GACIODCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
+export default function GACIODCard({
+  title,
+  content,
+  onUpdate,
+  highlightedText,
+  highlightedIndices = [],
+  color,
+  icon: Icon,
+  subtitle,
+  prefix,
+  singular,
+  plural,
+  archivedContent = '',
+  onArchive,
+  onUnarchive,
+}: GACIODCardProps) {
   const [localContent, setLocalContent] = useState(content);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newItemText, setNewItemText] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const newItemRef = useRef<HTMLInputElement>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const newItemRef = useRef<HTMLTextAreaElement>(null);
 
-  const prefix = getPrefix(title);
+  // Auto-grow a textarea to fit its content
+  const autoSize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  const accent = ACCENT[color];
   const items = parseItems(localContent);
+  const archivedItems = parseItems(archivedContent);
 
   // Sync local content with prop changes
   useEffect(() => {
     setLocalContent(content);
   }, [content]);
 
-  // Focus input when editing
+  // Focus input when editing (and size it to fit the existing text)
   useEffect(() => {
     if (editingIndex !== null && inputRef.current) {
       inputRef.current.focus();
+      autoSize(inputRef.current);
     }
   }, [editingIndex]);
 
+  // Items are stored one-per-line, so collapse any newlines within a value
+  const sanitize = (text: string) => text.replace(/\s*\n+\s*/g, ' ');
+
   const handleItemUpdate = (index: number, newText: string) => {
+    const cleaned = sanitize(newText);
     const newItems = [...items];
-    if (newText.trim() === '') {
+    if (cleaned.trim() === '') {
       // Remove item if empty
       newItems.splice(index, 1);
     } else {
-      newItems[index] = newText;
+      newItems[index] = cleaned;
     }
     const newContent = newItems.join('\n');
     setLocalContent(newContent);
@@ -72,13 +136,17 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
   };
 
   const handleAddItem = () => {
-    if (newItemText.trim()) {
+    const cleaned = sanitize(newItemText).trim();
+    if (cleaned) {
       const newContent = localContent
-        ? `${localContent}\n${newItemText.trim()}`
-        : newItemText.trim();
+        ? `${localContent}\n${cleaned}`
+        : cleaned;
       setLocalContent(newContent);
       onUpdate(newContent);
       setNewItemText('');
+      if (newItemRef.current) {
+        newItemRef.current.style.height = 'auto';
+      }
     }
   };
 
@@ -126,8 +194,17 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 h-full flex flex-col min-h-0 overflow-hidden">
-      <h3 className="text-sm font-semibold text-gray-800 mb-3 shrink-0">{title}</h3>
+    <div className={`bg-white rounded-xl border-3 ${accent.border} shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 h-full flex flex-col min-h-0 overflow-hidden`}>
+      {/* Header */}
+      <div className="flex items-start gap-2.5 mb-3 shrink-0">
+        <Icon className={`w-6 h-6 mt-0.5 shrink-0 ${accent.icon}`} stroke={2} />
+        <div className="min-w-0">
+          <h2 className={`font-display text-xl leading-tight tracking-tight ${accent.title}`}>{title}</h2>
+          <p className={`text-sm font-medium leading-snug ${accent.title}`}>{subtitle}</p>
+        </div>
+      </div>
+
+      {/* Items */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
         {items.map((item, index) => {
           const isHighlighted = highlightedIndices.includes(index);
@@ -140,19 +217,20 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
                   : 'hover:bg-gray-50'
               }`}
             >
-              <span className={`text-[10px] font-medium mt-0.5 select-none shrink-0 ${
-                isHighlighted ? 'text-amber-600' : 'text-gray-400'
+              <span className={`text-sm font-medium select-none shrink-0 ${
+                isHighlighted ? 'text-amber-900' : 'text-gray-600'
               }`}>
-                {prefix}-{formatNumber(index + 1)}
+                {prefix}{formatNumber(index + 1)}
               </span>
               {editingIndex === index ? (
-                <input
+                <textarea
                   ref={inputRef}
-                  type="text"
+                  rows={1}
                   defaultValue={item}
+                  onInput={(e) => autoSize(e.currentTarget)}
                   onBlur={(e) => handleItemUpdate(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(e, index, e.currentTarget.value)}
-                  className="flex-1 text-sm font-normal text-gray-700 bg-white border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                  className="flex-1 min-w-0 resize-none overflow-hidden text-sm font-normal text-gray-700 leading-snug bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-gray-300"
                 />
               ) : (
                 <>
@@ -164,26 +242,26 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
                   >
                     {renderItemWithHighlight(item)}
                   </span>
-                  <button
-                    onClick={() => handleDeleteItem(index)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-0.5"
-                    aria-label="Delete item"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-3.5 h-3.5"
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    {onArchive && (
+                      <button
+                        onClick={() => onArchive(index)}
+                        className="text-gray-400 hover:text-gray-700 p-0.5"
+                        aria-label="Archive item"
+                        title="Archive"
+                      >
+                        <IconArchive className="w-4 h-4" stroke={1.5} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteItem(index)}
+                      className="text-gray-400 hover:text-red-500 p-0.5"
+                      aria-label="Delete item"
+                      title="Delete"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                      <IconX className="w-4 h-4" stroke={1.5} />
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -192,20 +270,76 @@ export default function GACIODCard({ title, content, onUpdate, highlightedText, 
 
         {/* Add new item input */}
         <div className="flex items-start gap-2 py-1 px-1">
-          <span className="text-[10px] font-medium text-gray-300 mt-0.5 select-none shrink-0">
-            {prefix}-{formatNumber(items.length + 1)}
+          <span className="text-sm font-medium text-gray-300 select-none shrink-0">
+            {prefix}{formatNumber(items.length + 1)}
           </span>
-          <input
+          <textarea
             ref={newItemRef}
-            type="text"
+            rows={1}
             value={newItemText}
-            onChange={(e) => setNewItemText(e.target.value)}
+            onChange={(e) => { setNewItemText(e.target.value); autoSize(e.currentTarget); }}
             onKeyDown={handleNewItemKeyDown}
             onBlur={handleAddItem}
-            placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
-            className="flex-1 text-sm font-normal text-gray-700 bg-transparent placeholder:text-gray-400 focus:outline-none"
+            placeholder={`Add ${singular}...`}
+            className="flex-1 min-w-0 resize-none overflow-hidden text-sm font-normal text-gray-700 leading-snug bg-transparent placeholder:text-gray-400 focus:outline-none"
           />
         </div>
+
+        {/* Archived items */}
+        {showArchived && archivedItems.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 px-1">
+              Archived
+            </p>
+            {archivedItems.map((item, index) => (
+              <div
+                key={index}
+                className="group flex items-start gap-2 py-1 px-1 rounded hover:bg-gray-50 transition-colors"
+              >
+                <span className="text-sm font-medium select-none shrink-0 text-gray-400">
+                  {prefix}{formatNumber(index + 1)}
+                </span>
+                <span className="flex-1 text-sm font-normal text-gray-400 line-through">
+                  {item}
+                </span>
+                {onUnarchive && (
+                  <button
+                    onClick={() => onUnarchive(index)}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition-opacity p-0.5 shrink-0"
+                    aria-label="Unarchive item"
+                    title="Unarchive"
+                  >
+                    <IconArchiveOff className="w-4 h-4" stroke={1.5} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex items-center justify-between gap-2 mt-3 pt-2 shrink-0">
+        <button
+          onClick={() => newItemRef.current?.focus()}
+          className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${accent.link}`}
+        >
+          <IconPencil className="w-4 h-4" stroke={1.75} />
+          New {singular}
+        </button>
+        {archivedItems.length > 0 && (
+          <button
+            onClick={() => setShowArchived((v) => !v)}
+            className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${accent.link}`}
+          >
+            {showArchived ? (
+              <IconEyeOff className="w-4 h-4" stroke={1.75} />
+            ) : (
+              <IconEye className="w-4 h-4" stroke={1.75} />
+            )}
+            {showArchived ? 'Hide' : 'Show'} archived {plural}
+          </button>
+        )}
       </div>
     </div>
   );

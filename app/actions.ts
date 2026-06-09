@@ -33,6 +33,63 @@ const CATEGORY_REVERSE: Record<string, string> = {
   Decisions: 'decisions',
 };
 
+type DbCategory =
+  | 'Goals'
+  | 'Assumptions'
+  | 'Constraints'
+  | 'Ideas'
+  | 'Opinions'
+  | 'Decisions';
+
+interface ItemRow {
+  id: string;
+  matrix: string;
+  category: DbCategory;
+  content: string;
+  sortKey: string;
+  createdAt: string;
+  updatedAt: string;
+  aiGenerated: boolean;
+  archived: boolean;
+}
+
+/**
+ * Build matrix_items rows from a GACIODContent-shaped object. Each category has
+ * an active string (e.g. `goals`) and an archived string (e.g. `goalsArchived`),
+ * both newline-delimited. Archived items are flagged with `archived: true`.
+ */
+function buildItemRows(
+  matrixId: string,
+  content: Record<string, string>,
+  now: string,
+): ItemRow[] {
+  const rows: ItemRow[] = [];
+  for (const [key, dbCategory] of Object.entries(CATEGORY_MAP)) {
+    for (const [field, archived] of [
+      [key, false],
+      [`${key}Archived`, true],
+    ] as const) {
+      const text = content[field] ?? '';
+      if (!text.trim()) continue;
+      const lines = text.split('\n').filter((l: string) => l.trim() !== '');
+      lines.forEach((line: string, idx: number) => {
+        rows.push({
+          id: uuidv4(),
+          matrix: matrixId,
+          category: dbCategory as DbCategory,
+          content: line.trim(),
+          sortKey: `${dbCategory}-${archived ? 'A' : '0'}-${String(idx).padStart(4, '0')}`,
+          createdAt: now,
+          updatedAt: now,
+          aiGenerated: false,
+          archived,
+        });
+      });
+    }
+  }
+  return rows;
+}
+
 // ---------------------------------------------------------------------------
 // Session CRUD (backed by `matrices` table)
 // ---------------------------------------------------------------------------
@@ -121,6 +178,7 @@ export async function createSession() {
       title: '',
       question: '',
       context: '',
+      onboarded: false,
       createdAt: now,
       updatedAt: now,
     })
@@ -142,6 +200,7 @@ export async function updateSession(
     content?: Record<string, string>;
     context?: string;
     messages?: unknown[];
+    onboarded?: boolean;
   },
 ) {
   const user = await getAuthUser();
@@ -161,6 +220,7 @@ export async function updateSession(
   if (data.title !== undefined) matrixUpdate.name = data.title;
   if (data.content?.title !== undefined) matrixUpdate.title = data.content.title;
   if (data.context !== undefined) matrixUpdate.context = data.context;
+  if (data.onboarded !== undefined) matrixUpdate.onboarded = data.onboarded;
 
   await db
     .update(matrices)
@@ -172,35 +232,8 @@ export async function updateSession(
     // Delete existing items for this matrix
     await db.delete(matrixItems).where(eq(matrixItems.matrix, sessionId));
 
-    // Insert new items
-    const newItems: {
-      id: string;
-      matrix: string;
-      category: 'Goals' | 'Assumptions' | 'Constraints' | 'Ideas' | 'Opinions' | 'Decisions';
-      content: string;
-      sortKey: string;
-      createdAt: string;
-      updatedAt: string;
-      aiGenerated: boolean;
-    }[] = [];
-
-    for (const [key, dbCategory] of Object.entries(CATEGORY_MAP)) {
-      const text = data.content[key] ?? '';
-      if (!text.trim()) continue;
-      const lines = text.split('\n').filter((l: string) => l.trim() !== '');
-      lines.forEach((line: string, idx: number) => {
-        newItems.push({
-          id: uuidv4(),
-          matrix: sessionId,
-          category: dbCategory as 'Goals' | 'Assumptions' | 'Constraints' | 'Ideas' | 'Opinions' | 'Decisions',
-          content: line.trim(),
-          sortKey: `${dbCategory}-${String(idx).padStart(4, '0')}`,
-          createdAt: now,
-          updatedAt: now,
-          aiGenerated: false,
-        });
-      });
-    }
+    // Insert new items (active + archived)
+    const newItems = buildItemRows(sessionId, data.content, now);
 
     if (newItems.length > 0) {
       await db.insert(matrixItems).values(newItems);
@@ -297,34 +330,7 @@ export async function importSessions(
       updatedAt: now,
     });
 
-    const newItems: {
-      id: string;
-      matrix: string;
-      category: 'Goals' | 'Assumptions' | 'Constraints' | 'Ideas' | 'Opinions' | 'Decisions';
-      content: string;
-      sortKey: string;
-      createdAt: string;
-      updatedAt: string;
-      aiGenerated: boolean;
-    }[] = [];
-
-    for (const [key, dbCategory] of Object.entries(CATEGORY_MAP)) {
-      const text = (session.content as Record<string, string>)?.[key] ?? '';
-      if (!text.trim()) continue;
-      const lines = text.split('\n').filter((l: string) => l.trim() !== '');
-      lines.forEach((line: string, idx: number) => {
-        newItems.push({
-          id: uuidv4(),
-          matrix: id,
-          category: dbCategory as 'Goals' | 'Assumptions' | 'Constraints' | 'Ideas' | 'Opinions' | 'Decisions',
-          content: line.trim(),
-          sortKey: `${dbCategory}-${String(idx).padStart(4, '0')}`,
-          createdAt: now,
-          updatedAt: now,
-          aiGenerated: false,
-        });
-      });
-    }
+    const newItems = buildItemRows(id, session.content as Record<string, string>, now);
 
     if (newItems.length > 0) {
       await db.insert(matrixItems).values(newItems);
@@ -388,31 +394,35 @@ function buildClientSession(
   items: (typeof matrixItems.$inferSelect)[],
   convos: (typeof conversations.$inferSelect)[],
 ) {
-  // Group items by category → reconstruct GACIODContent
-  const contentMap: Record<string, string[]> = {
-    goals: [],
-    assumptions: [],
-    constraints: [],
-    ideas: [],
-    opinions: [],
-    decisions: [],
+  // Group items by category → reconstruct GACIODContent (active + archived)
+  const active: Record<string, string[]> = {
+    goals: [], assumptions: [], constraints: [], ideas: [], opinions: [], decisions: [],
+  };
+  const archived: Record<string, string[]> = {
+    goals: [], assumptions: [], constraints: [], ideas: [], opinions: [], decisions: [],
   };
 
   for (const item of items) {
     const key = CATEGORY_REVERSE[item.category ?? ''];
     if (key && item.content) {
-      contentMap[key].push(item.content);
+      (item.archived ? archived : active)[key].push(item.content);
     }
   }
 
   const content = {
     title: matrix.title ?? '',
-    goals: contentMap.goals.join('\n'),
-    assumptions: contentMap.assumptions.join('\n'),
-    constraints: contentMap.constraints.join('\n'),
-    ideas: contentMap.ideas.join('\n'),
-    opinions: contentMap.opinions.join('\n'),
-    decisions: contentMap.decisions.join('\n'),
+    goals: active.goals.join('\n'),
+    assumptions: active.assumptions.join('\n'),
+    constraints: active.constraints.join('\n'),
+    ideas: active.ideas.join('\n'),
+    opinions: active.opinions.join('\n'),
+    decisions: active.decisions.join('\n'),
+    goalsArchived: archived.goals.join('\n'),
+    assumptionsArchived: archived.assumptions.join('\n'),
+    constraintsArchived: archived.constraints.join('\n'),
+    ideasArchived: archived.ideas.join('\n'),
+    opinionsArchived: archived.opinions.join('\n'),
+    decisionsArchived: archived.decisions.join('\n'),
   };
 
   // Reconstruct messages from conversations
@@ -436,6 +446,7 @@ function buildClientSession(
     content,
     context: matrix.context ?? '',
     messages,
+    onboarded: matrix.onboarded ?? true,
     createdAt: matrix.createdAt ?? new Date().toISOString(),
     updatedAt: matrix.updatedAt ?? new Date().toISOString(),
   };

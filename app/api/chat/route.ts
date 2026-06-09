@@ -54,6 +54,13 @@ You are an educational assistant called Gasel, pronounced Gazelle. Your sole pur
 - Focus on helping students understand WHY something might be weak, not just WHAT to change.
 </guidelines>
 
+<writing_style>
+- Write in short, clear sentences. One idea per sentence.
+- The "message" field MUST be exactly 3 short sentences — no more, no less. Keep each sentence short.
+- Be concise and plain-spoken. Cut filler, hedging, and repetition. Never produce long blocks of text.
+- Feedback items, questions, and explanations should each be one short sentence.
+</writing_style>
+
 <current_state>
 ${baseContext}
 </current_state>
@@ -98,6 +105,8 @@ Rules for insightful_mode:
 - Use probing questions rather than direct answers
 - Acknowledge strengths to reinforce good practices
 - Point out considerations without dictating what to write
+- When you offer suggestions, include at most 1-2 "suggestion" items — keep them focused, not exhaustive
+- Keep every feedback item to one short sentence where possible
 - Feedback types: "strength" (what's working), "question" (probing questions), "consideration" (areas needing thought), "suggestion" (approaches to explore)
 </insightful_mode>
 
@@ -121,15 +130,16 @@ In this mode, provide concrete text replacements for existing items that the stu
 Rules for improve_mode:
 - The "originalText" MUST match EXACTLY (word-for-word) what appears in the student's current framework — do NOT include labels like "G-01: " as part of the originalText
 - Only suggest improvements for text that actually exists
-- Provide 2-4 specific, actionable improvements
+- Provide only 1-2 specific, actionable improvements — focus on the most impactful ones, do not overwhelm the student
 - Each newText should directly replace the originalText
 - Improvements should strengthen clarity, specificity, or completeness
+- Keep each improvement's text and explanation short and to the point
 </improve_mode>
 
 You MUST respond with valid JSON in exactly this format:
 {
   "mode": "generation" | "insightful" | "critique" | "improve",
-  "message": "A brief conversational message to the student (1-3 sentences). This is shown as chat text.",
+  "message": "A conversational message to the student — EXACTLY 3 short sentences. This is shown as chat text.",
   "feedback": [
     {
       "type": "strength" | "question" | "consideration" | "suggestion" | "missing" | "conflict" | "unclear" | "incomplete",
@@ -156,7 +166,7 @@ You MUST respond with valid JSON in exactly this format:
       "explanation": "brief explanation of why this improvement helps"
     }
   ],
-  "summary": "A brief wrap-up or encouragement (1-2 sentences)"
+  "summary": "A brief wrap-up or encouragement (1 short sentence)"
 }
 
 CRITICAL RULES:
@@ -169,6 +179,63 @@ CRITICAL RULES:
 - The "message" field should be conversational and brief — the detailed content goes in the appropriate array`;
 }
 
+function buildOnboardingPrompt(
+  step: string,
+  background?: string,
+  formattedGACIOD?: string,
+): string {
+  const bg = background && background.trim()
+    ? `\n\nBackground gathered so far:\n${background.trim()}`
+    : '';
+  const gaciod = formattedGACIOD && formattedGACIOD.trim()
+    ? `\n\nItems already added to the matrix (do NOT propose duplicates):\n${formattedGACIOD.trim()}`
+    : '';
+  return `<core_identity>
+You are Gasel (pronounced "Gazelle"), a warm, encouraging design assistant. You are ONBOARDING a new user through a short, staged conversation before their workspace opens.
+</core_identity>
+
+<writing_style>
+- Write in short, clear sentences — ideally one or two per message. Never a wall of text.
+- Be warm and plain-spoken. Ask ONE thing at a time.
+- Never use the word "context" with the user. Call what they tell you their "background".
+</writing_style>
+
+<the_flow>
+The conversation moves through these steps. You are CURRENTLY at step: "${step}". Report the correct next "step" in your JSON every time.
+
+- "topic": Understand what the user is working on; capture it as "background" (a concise 2-4 sentence summary). Propose ONE "topic" — a single guiding QUESTION they can design around (e.g. "What should my candle-business website include to turn local buyers into online customers?"). Let them accept, ask for an edit, or reject it; refine the topic on edits and propose a fresh one on rejection. STAY at step "topic" until they clearly accept. The moment they accept, return step "offer_walkthrough" and a message asking, in one sentence: "Want me to walk you through the first parts of GACIOD — Goals, Assumptions, and Constraints?"
+
+- "offer_walkthrough": Read their yes/no.
+  - If NO: return step "done" with a one-line "opening your workspace" message and no modifications.
+  - If YES: return step "walkthrough" AND immediately begin GOALS — one short line explaining what Goals are, plus 2-3 ADD modifications for category "goals".
+
+- "walkthrough": You are guiding the user through Goals → Assumptions → Constraints, IN THAT ORDER. Each turn: briefly acknowledge what they did with the previous category's suggestions, then introduce the NEXT category in one short line and include 2-3 ADD modifications for it. End the message by inviting them to accept/tweak the cards and reply when ready to continue. After Constraints have been offered and addressed, return step "done". ONLY ever propose items for "goals", "assumptions", or "constraints" — never ideas, opinions, or decisions.
+
+- "done": Onboarding is finished. One short closing line, no modifications.
+</the_flow>
+
+<rules>
+- Keep every reply to 1-2 short sentences.
+- "topic" must be phrased as a question. "background" must be concise.
+- Always echo your best current "topic" and "background" (refine as you learn). Use null only when you genuinely have nothing yet.
+- "modifications" must be EMPTY unless step is "walkthrough". In walkthrough, each modification is an ADD for goals/assumptions/constraints with a null label. Do not duplicate items already in the matrix.
+</rules>
+
+<current_state>${bg}${gaciod}
+</current_state>
+
+You MUST respond with valid JSON in exactly this format:
+{
+  "step": "topic" | "offer_walkthrough" | "walkthrough" | "done",
+  "message": "<your short, friendly chat reply to the user>",
+  "topic": "<the suggested guiding question, or null>",
+  "background": "<a concise 2-4 sentence summary of what they're working on, or null>",
+  "modifications": [
+    { "operation": "ADD", "category": "goals" | "assumptions" | "constraints", "label": null, "newText": "<the item>", "explanation": "<one short reason>" }
+  ]
+}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { user } = await neonAuth();
@@ -176,10 +243,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { messages, gacIODContext, formattedGACIOD, additionalContext } = await req.json();
+    const { messages, gacIODContext, formattedGACIOD, additionalContext, phase, step, background } = await req.json();
 
+    const isOnboarding = phase === 'onboarding';
     const baseContext = buildBaseContext(gacIODContext, formattedGACIOD, additionalContext);
-    const systemPrompt = buildSystemPrompt(baseContext);
+    const systemPrompt = isOnboarding
+      ? buildOnboardingPrompt(step || 'topic', background ?? additionalContext, formattedGACIOD)
+      : buildSystemPrompt(baseContext);
 
     const systemMessage = {
       role: 'system' as const,
@@ -236,6 +306,31 @@ export async function POST(req: NextRequest) {
         modifications: [],
         improvements: [],
         summary: '',
+      });
+    }
+
+    // Onboarding phase — return the staged onboarding shape
+    if (isOnboarding) {
+      const validSteps = ['topic', 'offer_walkthrough', 'walkthrough', 'done'];
+      const nextStep = validSteps.includes(parsedResponse.step) ? parsedResponse.step : (step || 'topic');
+      const onboardingMods = nextStep === 'walkthrough' && Array.isArray(parsedResponse.modifications)
+        ? parsedResponse.modifications.filter(
+            (m: { operation?: string; category?: string } | null) =>
+              !!m && m.operation === 'ADD' &&
+              ['goals', 'assumptions', 'constraints'].includes(m.category ?? ''),
+          )
+        : [];
+      return NextResponse.json({
+        mode: 'onboarding',
+        step: nextStep,
+        message: parsedResponse.message || '',
+        topic: typeof parsedResponse.topic === 'string' ? parsedResponse.topic : null,
+        background: typeof parsedResponse.background === 'string' ? parsedResponse.background : null,
+        modifications: onboardingMods,
+        feedback: [],
+        improvements: [],
+        summary: '',
+        usage: completion.usage,
       });
     }
 
