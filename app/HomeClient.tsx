@@ -1,11 +1,27 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback, useTransition } from 'react';
-import GACIODCard, { formatForAI } from '@/components/GACIODCard';
+import { useState, useMemo, useEffect, useCallback, useTransition, useRef, forwardRef } from 'react';
+import GACIODCard, { formatForAI, type AccentColor } from '@/components/GACIODCard';
 import Chat, { Message, Improvement, Modification } from '@/components/Chat';
-import SuggestionsTimeline from '@/components/SuggestionsTimeline';
 import ChatSidebar from '@/components/ChatSidebar';
 import { authClient } from '@/lib/auth/client';
+import {
+  IconTarget,
+  IconHelpCircle,
+  IconLock,
+  IconBulb,
+  IconMessageCircle,
+  IconFlagCheck,
+  IconChecklist,
+  IconZoomQuestion,
+  IconSparkles,
+  IconShare3,
+  IconNotes,
+  IconMessages,
+  IconPencil,
+  type TablerIcon,
+  IconCheck,
+} from '@tabler/icons-react';
 import {
   createSession as createDbSession,
   updateSession as updateDbSession,
@@ -21,7 +37,23 @@ export interface GACIODContent {
   ideas: string;
   opinions: string;
   decisions: string;
+  goalsArchived: string;
+  assumptionsArchived: string;
+  constraintsArchived: string;
+  ideasArchived: string;
+  opinionsArchived: string;
+  decisionsArchived: string;
 }
+
+// Map an active category key → its archived counterpart
+const ARCHIVED_KEY: Record<string, keyof GACIODContent> = {
+  goals: 'goalsArchived',
+  assumptions: 'assumptionsArchived',
+  constraints: 'constraintsArchived',
+  ideas: 'ideasArchived',
+  opinions: 'opinionsArchived',
+  decisions: 'decisionsArchived',
+};
 
 export interface ClientSession {
   id: string;
@@ -29,9 +61,96 @@ export interface ClientSession {
   content: GACIODContent;
   context: string;
   messages: Message[];
+  onboarded: boolean;
   createdAt: number;
   updatedAt: number;
 }
+
+// Greeting bank for the chat-first onboarding (client-seeded, no API call).
+const GREETINGS = [
+  "Hi {name} — I'm Gazelle. Let's turn an idea into a plan. What are you working on?",
+  "Hello {name}! Gazelle here. What's the project on your mind today?",
+  "Hey {name}, I'm Gazelle. Tell me what you're trying to build and we'll shape it together — what are you working on?",
+  "Welcome, {name}. I'm Gazelle, your design partner. What problem are we tackling this time?",
+  "Hi {name} — Gazelle at your service. What's the thing you want to design or figure out?",
+];
+
+function pickGreeting(firstName: string): string {
+  const name = firstName || 'there';
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)].replace('{name}', name);
+}
+
+// Lightweight, dependency-free confetti burst (uses the matrix accent colors).
+function fireConfetti() {
+  if (typeof document === 'undefined') return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+  const colors = ['#22C55E', '#E8B84B', '#E07070', '#AB6FD4', '#E8834A', '#4A8FD4'];
+  const container = document.createElement('div');
+  container.style.cssText =
+    'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;';
+  document.body.appendChild(container);
+
+  const count = 130;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('div');
+    const w = 6 + Math.random() * 6;
+    const h = w * (0.4 + Math.random() * 0.9);
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.cssText =
+      `position:absolute;top:-20px;left:${Math.random() * 100}vw;width:${w}px;height:${h}px;` +
+      `background:${color};border-radius:1px;will-change:transform;`;
+    container.appendChild(piece);
+
+    const xDrift = (Math.random() - 0.5) * 260;
+    const rotate = (Math.random() - 0.5) * 720;
+    const duration = 2200 + Math.random() * 1600;
+    const delay = Math.random() * 350;
+    const anim = piece.animate(
+      [
+        { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+        { transform: `translate(${xDrift}px, 105vh) rotate(${rotate}deg)`, opacity: 1, offset: 0.85 },
+        { transform: `translate(${xDrift}px, 110vh) rotate(${rotate}deg)`, opacity: 0 },
+      ],
+      { duration, delay, easing: 'cubic-bezier(0.2, 0.6, 0.4, 1)', fill: 'forwards' },
+    );
+    anim.onfinish = () => piece.remove();
+  }
+
+  setTimeout(() => container.remove(), 5000);
+}
+
+// A single-line-styled textarea that wraps and grows with its content (no clipping).
+const AutoTextarea = forwardRef<HTMLTextAreaElement, {
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  className?: string;
+}>(function AutoTextarea({ value, onChange, onKeyDown, placeholder, className }, forwardedRef) {
+  const innerRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={(node) => {
+        innerRef.current = node;
+        if (typeof forwardedRef === 'function') forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
+      }}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      className={`resize-none ${className ?? ''}`}
+    />
+  );
+});
 
 function emptyContent(): GACIODContent {
   return {
@@ -42,17 +161,48 @@ function emptyContent(): GACIODContent {
     ideas: '',
     opinions: '',
     decisions: '',
+    goalsArchived: '',
+    assumptionsArchived: '',
+    constraintsArchived: '',
+    ideasArchived: '',
+    opinionsArchived: '',
+    decisionsArchived: '',
   };
 }
+
+interface CardConfig {
+  key: 'goals' | 'assumptions' | 'constraints' | 'ideas' | 'opinions' | 'decisions';
+  title: string;
+  prefix: string;
+  color: AccentColor;
+  icon: TablerIcon;
+  subtitle: string;
+  singular: string;
+  plural: string;
+}
+
+const CARDS: CardConfig[] = [
+  { key: 'goals', title: 'Goals', prefix: 'G', color: 'green', icon: IconTarget, subtitle: 'What are the outcomes you are designing towards?', singular: 'goal', plural: 'goals' },
+  { key: 'assumptions', title: 'Assumptions', prefix: 'A', color: 'yellow', icon: IconHelpCircle, subtitle: 'What are you treating as true without full evidence?', singular: 'assumption', plural: 'assumptions' },
+  { key: 'constraints', title: 'Constraints', prefix: 'C', color: 'red', icon: IconLock, subtitle: 'What limits our solution space?', singular: 'constraint', plural: 'constraints' },
+  { key: 'ideas', title: 'Ideas', prefix: 'I', color: 'violet', icon: IconBulb, subtitle: 'What approaches are worth exploring?', singular: 'idea', plural: 'ideas' },
+  { key: 'opinions', title: 'Opinions', prefix: 'O', color: 'orange', icon: IconMessageCircle, subtitle: "What do we think, but can't prove?", singular: 'opinion', plural: 'opinions' },
+  { key: 'decisions', title: 'Decision + Rationale', prefix: 'D', color: 'blue', icon: IconFlagCheck, subtitle: 'What have we committed to and why?', singular: 'decision', plural: 'decisions' },
+];
+
+const LEFT_WIDTH_DEFAULT = 440;
+const LEFT_WIDTH_MIN = 340;
+const LEFT_WIDTH_MAX = 720;
 
 /** Convert DB session rows (from buildClientSession in actions.ts) to client format */
 function toClientSession(row: any): ClientSession {
   return {
     id: row.id,
     title: row.title ?? 'New Chat',
-    content: (row.content as GACIODContent) ?? emptyContent(),
+    content: { ...emptyContent(), ...(row.content as Partial<GACIODContent>) },
     context: row.context ?? '',
     messages: (row.messages as Message[]) ?? [],
+    onboarded: row.onboarded ?? true,
     createdAt: row.createdAt ? new Date(row.createdAt).getTime() : Date.now(),
     updatedAt: row.updatedAt ? new Date(row.updatedAt).getTime() : Date.now(),
   };
@@ -65,6 +215,7 @@ interface HomeClientProps {
 export default function HomeClient({ initialSessions }: HomeClientProps) {
   const { data: sessionData } = authClient.useSession();
   const userName = sessionData?.user?.name || '';
+  const firstName = userName.split(' ')[0] || '';
 
   const [sessions, setSessions] = useState<ClientSession[]>(
     () => initialSessions.map(toClientSession),
@@ -72,11 +223,8 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
   const [activeSessionId, setActiveSessionId] = useState<string>(
     () => sessions[0]?.id ?? '',
   );
-  const [showLanding, setShowLanding] = useState(true);
-  const [landingQuestion, setLandingQuestion] = useState('');
-  const [landingContext, setLandingContext] = useState('');
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId),
@@ -89,46 +237,96 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
   const [messages, setMessages] = useState<Message[]>(
     () => activeSession?.messages ?? [],
   );
+  // Onboarding (chat-first) state. A session is "onboarded" once the matrix is revealed.
+  const [onboarded, setOnboarded] = useState<boolean>(
+    () => activeSession?.onboarded ?? false,
+  );
+  const [pendingTopic, setPendingTopic] = useState<string | null>(null);
+  const [pendingContext, setPendingContext] = useState<string | null>(null);
+  type OnboardStep = 'topic' | 'offer_walkthrough' | 'walkthrough' | 'done';
+  const [onboardStep, setOnboardStep] = useState<OnboardStep>('topic');
+  const [openCountdown, setOpenCountdown] = useState<number | null>(null);
+  const onboardingInit = useRef(false);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isGeneratingSample, setIsGeneratingSample] = useState(false);
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [context, setContext] = useState(activeSession?.context ?? '');
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [activeRightTab, setActiveRightTab] = useState<'chat' | 'suggestions' | 'context'>('chat');
+  const [leftWidth, setLeftWidth] = useState(LEFT_WIDTH_DEFAULT);
+  const columnsRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+  const topicRef = useRef<HTMLTextAreaElement>(null);
 
-  // Handle "Get Started" from landing page — creates session in DB with question/context
-  const handleGetStarted = () => {
-    const question = landingQuestion.trim();
-    const ctx = landingContext.trim();
-    if (!question) return;
+  // Restore persisted left-column width
+  useEffect(() => {
+    const saved = Number(localStorage.getItem('gasel-left-width'));
+    if (saved >= LEFT_WIDTH_MIN && saved <= LEFT_WIDTH_MAX) setLeftWidth(saved);
+  }, []);
 
-    startTransition(async () => {
-      const newRow = await createDbSession();
-      const cs = toClientSession(newRow);
-      // Set the question as the title and context
-      cs.content.title = question;
-      cs.title = question.slice(0, 50);
-      cs.context = ctx;
+  useEffect(() => {
+    localStorage.setItem('gasel-left-width', String(leftWidth));
+  }, [leftWidth]);
 
-      // Persist to DB immediately
-      await updateDbSession(cs.id, {
-        title: cs.title,
-        content: { ...cs.content } as unknown as Record<string, string>,
-        context: ctx,
-        messages: [],
-      });
-
-      setSessions((prev) => [cs, ...prev]);
-      setActiveSessionId(cs.id);
-      setContent(cs.content);
-      setMessages([]);
-      setContext(ctx);
-      setShowLanding(false);
-      setLandingQuestion('');
-      setLandingContext('');
-    });
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const containerLeft = columnsRef.current?.getBoundingClientRect().left ?? 0;
+      const w = Math.min(LEFT_WIDTH_MAX, Math.max(LEFT_WIDTH_MIN, ev.clientX - containerLeft));
+      setLeftWidth(w);
+    };
+    const onUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
+
+  // Begin a fresh chat-first onboarding (no DB write yet — session is created lazily on first send).
+  const startOnboarding = useCallback(() => {
+    setActiveSessionId('');
+    setContent(emptyContent());
+    setContext('');
+    setPendingTopic(null);
+    setPendingContext(null);
+    setOnboardStep('topic');
+    setMessages([
+      {
+        id: Date.now().toString(),
+        text: pickGreeting(firstName),
+        sender: 'assistant',
+        timestamp: Date.now(),
+      },
+    ]);
+    setOnboarded(false);
+    setChatSidebarOpen(false);
+  }, [firstName]);
+
+  // Brand-new users (no sessions) start in onboarding once auth (and their name) resolves.
+  useEffect(() => {
+    if (onboardingInit.current) return;
+    if (sessionData === undefined) return; // wait for the user's name to load
+    if (sessions.length === 0) {
+      onboardingInit.current = true;
+      startOnboarding();
+    }
+  }, [sessionData, sessions.length, startOnboarding]);
+
+  // Ensure a DB session exists, creating one lazily. Returns its id.
+  const ensureSession = useCallback(async (): Promise<string> => {
+    if (activeSessionId) return activeSessionId;
+    const newRow = await createDbSession();
+    const cs = toClientSession(newRow);
+    setSessions((prev) => [cs, ...prev]);
+    setActiveSessionId(cs.id);
+    return cs.id;
+  }, [activeSessionId]);
 
   // Derive title helper
   const deriveTitle = useCallback(
@@ -141,9 +339,10 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     [],
   );
 
-  // Persist to DB on content/messages/context change (debounced)
+  // Persist to DB on content/messages/context change (debounced). Runs during
+  // onboarding too (once a session exists) so the conversation is saved.
   useEffect(() => {
-    if (!activeSessionId || showLanding) return;
+    if (!activeSessionId) return;
     const timeout = setTimeout(() => {
       const title = deriveTitle(messages, content);
       startTransition(async () => {
@@ -152,29 +351,27 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
           content: content as unknown as Record<string, string>,
           context,
           messages: messages as unknown[],
+          onboarded,
         });
       });
       // Update local sessions state
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
-            ? { ...s, title, content, context, messages, updatedAt: Date.now() }
+            ? { ...s, title, content, context, messages, onboarded, updatedAt: Date.now() }
             : s,
         ),
       );
     }, 500);
     return () => clearTimeout(timeout);
-  }, [content, messages, context, activeSessionId, showLanding, deriveTitle]);
+  }, [content, messages, context, activeSessionId, onboarded, deriveTitle]);
 
   const handleNewChat = () => {
-    setShowLanding(true);
-    setLandingQuestion('');
-    setLandingContext('');
-    setChatSidebarOpen(false);
+    startOnboarding();
   };
 
   const handleSelectSession = (id: string) => {
-    if (id === activeSessionId && !showLanding) {
+    if (id === activeSessionId && onboarded) {
       setChatSidebarOpen(false);
       return;
     }
@@ -184,8 +381,11 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     setContent(session.content);
     setMessages(session.messages);
     setContext(session.context);
+    setOnboarded(session.onboarded);
+    setPendingTopic(null);
+    setPendingContext(null);
+    setOnboardStep(session.onboarded ? 'done' : 'topic');
     setInputValue('');
-    setShowLanding(false);
     setChatSidebarOpen(false);
   };
 
@@ -205,6 +405,10 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
         setContent(next.content);
         setMessages(next.messages);
         setContext(next.context);
+        setOnboarded(next.onboarded);
+        setPendingTopic(null);
+        setPendingContext(null);
+        setOnboardStep(next.onboarded ? 'done' : 'topic');
       }
     }
     setInputValue('');
@@ -214,13 +418,40 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     setContent({ ...content, [key]: value });
   };
 
+  // Move an item between the active and archived lists for a category.
+  const moveItem = (
+    category: keyof GACIODContent,
+    index: number,
+    direction: 'archive' | 'unarchive',
+  ) => {
+    const archivedKey = ARCHIVED_KEY[category];
+    if (!archivedKey) return;
+    setContent((prev) => {
+      const fromKey = direction === 'archive' ? category : archivedKey;
+      const toKey = direction === 'archive' ? archivedKey : category;
+      const fromItems = parseItems(prev[fromKey]);
+      if (index < 0 || index >= fromItems.length) return prev;
+      const [moved] = fromItems.splice(index, 1);
+      const toItems = parseItems(prev[toKey]);
+      toItems.push(moved);
+      return {
+        ...prev,
+        [fromKey]: fromItems.join('\n'),
+        [toKey]: toItems.join('\n'),
+      };
+    });
+  };
+
   const stripLabel = (text: string): string => {
     return text.replace(/^[GACIOD]-\d{2}:\s*/, '').trim();
   };
 
   const parseItems = (contentStr: string): string[] => {
     if (!contentStr.trim()) return [];
-    return contentStr.split('\n').filter((line) => line.trim() !== '');
+    return contentStr
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map(stripLabel);
   };
 
   const resolveLabelToIndex = (
@@ -312,12 +543,14 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
 
     // Use functional update to avoid stale closure over content
     setContent((prev) => {
+      const newText = modification.newText ? stripLabel(modification.newText) : '';
+
       if (category === 'title') {
         switch (modification.operation) {
           case 'ADD':
           case 'UPDATE':
-            if (modification.newText) {
-              return { ...prev, title: modification.newText };
+            if (newText) {
+              return { ...prev, title: newText };
             }
             break;
           case 'DELETE':
@@ -331,19 +564,19 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
 
       switch (modification.operation) {
         case 'ADD':
-          if (modification.newText) {
-            newItems = [...items, modification.newText];
+          if (newText) {
+            newItems = [...items, newText];
           }
           break;
         case 'UPDATE':
-          if (modification.label && modification.newText) {
+          if (modification.label && newText) {
             // Resolve label against the current (up-to-date) content
             const match = modification.label.match(/^([GACIOD])-(\d{2})$/);
             if (match) {
               const index = parseInt(match[2], 10) - 1;
               if (index >= 0 && index < items.length) {
                 newItems = [...items];
-                newItems[index] = modification.newText;
+                newItems[index] = newText;
               }
             }
           }
@@ -440,6 +673,21 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     }
   };
 
+  // Share = export the matrix, drop a "Workspace shared." note in the chat, and celebrate.
+  const handleShare = () => {
+    handleExportData();
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-share`,
+        text: 'Workspace shared.',
+        sender: 'system',
+        timestamp: Date.now(),
+      },
+    ]);
+    fireConfetti();
+  };
+
   const handleImportData = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -468,7 +716,7 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
             setContent(first.content);
             setMessages(first.messages);
             setContext(first.context);
-            setShowLanding(false);
+            setOnboarded(true);
           }
         });
       } catch (error) {
@@ -479,7 +727,168 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     input.click();
   };
 
+  // Onboarding conversation: gather Topic + Context, then reveal the matrix.
+  const handleOnboardingMessage = async (text: string) => {
+    const priorMessages = messages;
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      text,
+      sender: 'user',
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, newMessage]);
+    setIsLoading(true);
+
+    try {
+      await ensureSession();
+      const formattedGACIOD = formatForAI({
+        goals: content.goals,
+        assumptions: content.assumptions,
+        constraints: content.constraints,
+        ideas: content.ideas,
+        opinions: content.opinions,
+        decisions: content.decisions,
+      });
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...priorMessages, newMessage],
+          phase: 'onboarding',
+          step: onboardStep,
+          background: pendingContext ?? context,
+          formattedGACIOD,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to get response from Gazelle');
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+
+      const mods: Modification[] | undefined =
+        Array.isArray(data.modifications) && data.modifications.length > 0
+          ? data.modifications
+          : undefined;
+
+      // Attach the topic card only when this is a NEW/changed suggestion, so each
+      // distinct proposal (incl. rejected ones) stays in the conversation history.
+      const newTopic =
+        typeof data.topic === 'string' && data.topic.trim() ? data.topic.trim() : null;
+      // Only surface a topic card while we're still choosing the topic. Once the
+      // user has accepted (step advances past "topic"), don't re-show it.
+      const isNewSuggestion =
+        data.step === 'topic' && !!newTopic && newTopic !== (pendingTopic ?? '');
+
+      const assistantMessage: Message = {
+        id: `${Date.now()}-assistant`,
+        text: data.message || 'Tell me a bit about what you want to build.',
+        sender: 'assistant',
+        timestamp: Date.now(),
+        modifications: mods,
+        topicSuggestion: isNewSuggestion ? newTopic : undefined,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (typeof data.step === 'string') setOnboardStep(data.step as OnboardStep);
+      // Lock the topic once accepted — only update while still choosing it.
+      if (newTopic && data.step === 'topic') {
+        setPendingTopic(newTopic);
+      }
+      if (typeof data.background === 'string' && data.background.trim()) {
+        setPendingContext(data.background.trim());
+        setContext(data.background.trim());
+      }
+    } catch (error: unknown) {
+      const errorMessage: Message = {
+        id: `${Date.now()}-error`,
+        text: 'Sorry, I ran into a problem. Please try again.',
+        sender: 'system',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      console.error('Onboarding error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reveal the matrix workspace, applying the suggested Topic + Context and
+  // welcoming the user into GACIOD with a short "here's what you can do" message.
+  const openWorkspace = () => {
+    const topic = (pendingTopic ?? content.title ?? '').trim();
+    const ctx = pendingContext ?? context;
+    const nextContent = { ...content, title: topic || content.title };
+    const intro: Message = {
+      id: `${Date.now()}-intro`,
+      text:
+        "Your workspace is open. The GACIOD matrix gives you six cards to structure your thinking — Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions. Fill them in yourself, or ask me anytime to populate a section, review your framework, find gaps, or suggest improvements.",
+      sender: 'assistant',
+      timestamp: Date.now(),
+    };
+    const nextMessages = [...messages, intro];
+    setMessages(nextMessages);
+    setContent(nextContent);
+    setContext(ctx);
+    setOnboarded(true);
+    setOnboardStep('done');
+    startTransition(async () => {
+      const id = await ensureSession();
+      await updateDbSession(id, {
+        content: nextContent as unknown as Record<string, string>,
+        context: ctx,
+        onboarded: true,
+        messages: nextMessages as unknown[],
+      });
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? { ...s, content: nextContent, context: ctx, onboarded: true, messages: nextMessages }
+            : s,
+        ),
+      );
+    });
+  };
+
+  // Always call the latest openWorkspace from the auto-open timer (avoids stale closure).
+  const openWorkspaceRef = useRef(openWorkspace);
+  openWorkspaceRef.current = openWorkspace;
+
+  // When onboarding reaches "done", count down from 3s and auto-open the workspace.
+  useEffect(() => {
+    if (onboarded || onboardStep !== 'done') {
+      setOpenCountdown(null);
+      return;
+    }
+    setOpenCountdown(3);
+    const interval = setInterval(() => {
+      setOpenCountdown((c) => (c === null ? null : Math.max(0, c - 1)));
+    }, 1000);
+    const timer = setTimeout(() => {
+      openWorkspaceRef.current();
+    }, 3000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timer);
+    };
+  }, [onboarded, onboardStep]);
+
+  // Skip onboarding straight to the workspace (advanced users).
+  const skipToWorkspace = () => {
+    setOnboarded(true);
+    setOnboardStep('done');
+    startTransition(async () => {
+      const id = await ensureSession();
+      await updateDbSession(id, { onboarded: true, messages: messages as unknown[] });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, onboarded: true } : s)),
+      );
+    });
+  };
+
   const handleSendMessage = async (text: string) => {
+    if (!onboarded) {
+      await handleOnboardingMessage(text);
+      return;
+    }
     const newMessage: Message = {
       id: Date.now().toString(),
       text,
@@ -700,9 +1109,6 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     return result;
   }, [messages, content]);
 
-  // Derive first name for greeting
-  const firstName = userName.split(' ')[0] || '';
-
   return (
     <div className="h-screen bg-[#E8EDF2] flex flex-row overflow-hidden">
       <ChatSidebar
@@ -716,262 +1122,220 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
         onOpenSettings={() => setShowDebugMenu(!showDebugMenu)}
       />
 
-      {showLanding ? (
-        <div className="flex-1 flex flex-col items-center justify-center min-w-0 overflow-hidden px-4">
-          <div className="w-full max-w-2xl flex flex-col items-center">
-            {/* Greeting */}
-            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-800 mb-8 sm:mb-10">
-              <span className="mr-1.5">&#128075;</span> Hello, {firstName || 'there'}.
-            </h1>
+      {!onboarded ? (
+        <div className="flex-1 min-w-0 overflow-y-auto px-4 py-6">
+          <div className="min-h-full flex flex-col items-center justify-center">
+          <div className="w-full max-w-2xl flex flex-col gap-3 sm:gap-4">
+            {/* Header */}
+            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-6 py-5 shrink-0">
+              <h1 className="text-lg sm:text-2xl font-medium text-gray-900 whitespace-nowrap">
+            the <span className="font-display font-normal align-baseline text-gray-900">gazelle</span> workspace
+              </h1>
+            </div>
 
-            {/* Question input row */}
-            <div className="w-full flex items-center gap-3 mb-4">
-              <div className="flex-1 bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-5 py-3">
-                <input
-                  type="text"
-                  value={landingQuestion}
-                  onChange={(e) => setLandingQuestion(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleGetStarted();
-                    }
-                  }}
-                  placeholder="Question or Topic (e.g. What are some mechanics we need to consider for a matchmaking algorithm?)"
-                  className="w-full text-sm font-normal text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-400"
+            {/* Chat (messages + input in one frame) */}
+            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-col overflow-hidden">
+              <div className="p-4 pb-3.5 shrink-0 flex items-start gap-2.5 border-b-[3.5px] border-gray-100">
+                <IconMessages className="w-6 h-6 mt-0.5 shrink-0 text-gray-700" stroke={2} />
+                <div>
+                  <h3 className="font-display text-xl leading-tight tracking-tight text-gray-900">Chat</h3>
+                </div>
+              </div>
+              <div className="h-[clamp(320px,56vh,600px)] min-h-0">
+                <Chat
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  inputValue={inputValue}
+                  setInputValue={setInputValue}
+                  isLoading={isLoading}
+                  onAcceptModification={handleAcceptModification}
+                  onDenyModification={handleDenyModification}
+                  showActionsInline={false}
+                  showInput={true}
+                  inputPlaceholder="Reply to Gazelle..."
                 />
               </div>
-              <button
-                onClick={handleGetStarted}
-                disabled={!landingQuestion.trim() || isPending}
-                className="bg-white hover:bg-gray-50 rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-6 py-3 text-sm font-semibold text-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-              >
-                Get Started
-              </button>
             </div>
 
-            {/* Context section */}
-            <div className="w-full bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5">
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">Context</h3>
-              <p className="text-xs font-normal text-gray-400 mb-3">
-                Adding context can provide more useful insights from the assistant.
-              </p>
-              <textarea
-                value={landingContext}
-                onChange={(e) => setLandingContext(e.target.value)}
-                placeholder="Add additional context..."
-                className="w-full px-3 py-2.5 text-sm font-normal text-gray-700 bg-gray-50 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-gray-300 h-24 sm:h-28"
-              />
+            {/* Transition row */}
+            <div className="flex items-center justify-between gap-3 px-1 shrink-0">
+              <button
+                onClick={skipToWorkspace}
+                className="text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Skip to workspace →
+              </button>
+              {onboardStep === 'done' && (
+                <div className="flex items-center gap-3">
+                  {openCountdown !== null && (
+                    <span className="text-xs font-medium text-gray-400">
+                      Opening in {openCountdown}s…
+                    </span>
+                  )}
+                  <button
+                    onClick={openWorkspace}
+                    className="bg-gray-900 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-gray-800 transition-colors"
+                  >
+                    Open workspace →
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
           </div>
         </div>
       ) : (
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex-1 flex flex-col lg:flex-row p-3 sm:p-4 lg:p-6 gap-3 sm:gap-4 lg:gap-6 min-h-0 overflow-hidden">
-          {/* Left side - GACIOD cards */}
-          <div className="flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6 min-w-0 min-h-0 overflow-hidden">
-            {/* Title row */}
-            <div className="flex items-stretch gap-2 sm:gap-3 flex-shrink-0">
-              <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center flex-shrink-0">
-                <h1 className="text-sm sm:text-base font-bold text-black-500 whitespace-nowrap">
-                  Gasel
-                </h1>
+        {/* Header */}
+        <header className="flex items-center justify-between gap-3 px-4 sm:px-6 h-14 shrink-0">
+          <h1 className="text-lg sm:text-2xl font-medium text-gray-900 whitespace-nowrap">
+            the <span className="font-display font-normal align-baseline text-gray-900">gazelle</span> workspace
+          </h1>
+          <button
+            onClick={handleShare}
+            title="Share — export this matrix as a JSON file"
+            className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3.5 py-2 flex items-center gap-1.5 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <IconShare3 className="w-4 h-4" stroke={1.75} />
+            <span className="text-sm font-medium hidden sm:inline">Share</span>
+          </button>
+          {/* <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportData}
+              className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 py-2 flex items-center gap-1.5 text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Export all chat data as JSON"
+            >
+              <IconDownload className="w-4 h-4" stroke={1.5} />
+              <span className="text-xs sm:text-sm font-medium hidden sm:inline">Export</span>
+            </button>
+            <button
+              onClick={handleImportData}
+              disabled={isPending}
+              className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 py-2 flex items-center gap-1.5 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              title="Import chat data from JSON"
+            >
+              <IconUpload className="w-4 h-4" stroke={1.5} />
+              <span className="text-xs sm:text-sm font-medium hidden sm:inline">Import</span>
+            </button>
+          </div> */}
+        </header>
+
+        {/* Columns */}
+        <div
+          ref={columnsRef}
+          className="flex-1 flex flex-row min-h-0 overflow-hidden px-3 sm:px-4 lg:px-6 pb-3 sm:pb-4 lg:pb-6"
+        >
+          {/* Left column - Topic + Chat + Ask + Quick Actions */}
+          <div
+            style={{ width: leftWidth }}
+            className="flex flex-col gap-2.5 min-h-0 overflow-hidden shrink-0"
+          >
+            {/* Topic */}
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] shrink-0 flex flex-col overflow-hidden">
+              <div className="p-4 pb-3.5 shrink-0 flex items-start gap-2.5 border-b-[3.5px] border-gray-100">
+                <IconNotes className="w-6 h-6 mt-0.5 shrink-0 text-gray-700" stroke={2} />
+                <h3 className="font-display text-xl leading-tight tracking-tight text-gray-900 flex-1 mt-0.5">Topic</h3>                
               </div>
-              <div className="flex-1 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center px-3 sm:px-4">
-                <input
-                  type="text"
+              <div className="p-4 pt-3">
+                <AutoTextarea
+                  ref={topicRef}
                   value={content.title}
-                  onChange={(e) =>
-                    setContent({ ...content, title: e.target.value })
-                  }
-                  placeholder="Question (e.g. What are some mechanics we need to consider for a matchmaking algorithm?)"
-                  className="w-full py-2.5 text-sm font-normal text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-400 placeholder:font-normal"
+                  onChange={(v) => setContent({ ...content, title: v })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                  placeholder="Question (e.g. What mechanics matter for a matchmaking algorithm?)"
+                  className="w-full overflow-hidden text-sm font-normal text-gray-800 leading-snug bg-gray-50 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-300 placeholder:text-gray-400"
                 />
               </div>
-              <button
-                onClick={handleExportData}
-                className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0"
-                title="Export all chat data as JSON"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-                  />
-                </svg>
-                <span className="text-xs sm:text-sm font-medium hidden sm:inline">
-                  Export
-                </span>
-              </button>
-              <button
-                onClick={handleImportData}
-                disabled={isPending}
-                className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 sm:px-4 flex items-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0 disabled:opacity-50"
-                title="Import chat data from JSON"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                  />
-                </svg>
-                <span className="text-xs sm:text-sm font-medium hidden sm:inline">
-                  Import
-                </span>
-              </button>
-              <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="lg:hidden bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-3 flex items-center text-gray-500 hover:bg-gray-50 transition-colors flex-shrink-0"
-                aria-label={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
-                  />
-                </svg>
-              </button>
             </div>
 
-            {/* GACIOD Grid */}
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 grid-rows-3 lg:grid-rows-2 gap-2 sm:gap-3 lg:gap-4 min-h-0 overflow-hidden">
-              <GACIODCard
-                title="Goals"
-                content={content.goals}
-                onUpdate={(value) => updateContent('goals', value)}
-                highlightedIndices={highlightedIndices.goals}
-              />
-              <GACIODCard
-                title="Assumptions"
-                content={content.assumptions}
-                onUpdate={(value) => updateContent('assumptions', value)}
-                highlightedIndices={highlightedIndices.assumptions}
-              />
-              <GACIODCard
-                title="Constraints"
-                content={content.constraints}
-                onUpdate={(value) => updateContent('constraints', value)}
-                highlightedIndices={highlightedIndices.constraints}
-              />
-              <GACIODCard
-                title="Ideas"
-                content={content.ideas}
-                onUpdate={(value) => updateContent('ideas', value)}
-                highlightedIndices={highlightedIndices.ideas}
-              />
-              <GACIODCard
-                title="Opinions"
-                content={content.opinions}
-                onUpdate={(value) => updateContent('opinions', value)}
-                highlightedIndices={highlightedIndices.opinions}
-              />
-              <GACIODCard
-                title="Decisions"
-                content={content.decisions}
-                onUpdate={(value) => updateContent('decisions', value)}
-                highlightedIndices={highlightedIndices.decisions}
-              />
+            {/* Chat (messages + input in one frame) */}
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="p-4 pb-3.5 shrink-0 flex items-start gap-2.5 border-b-[3.5px] border-gray-100">
+                <IconMessages className="w-6 h-6 mt-0.5 shrink-0 text-gray-700" stroke={2} />
+                <div>
+                  <h3 className="font-display text-xl leading-tight tracking-tight text-gray-900">Chat</h3>
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <Chat
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  inputValue={inputValue}
+                  setInputValue={setInputValue}
+                  isLoading={isLoading}
+                  onAcceptImprovement={handleAcceptImprovement}
+                  onDenyImprovement={handleDenyImprovement}
+                  onAcceptModification={handleAcceptModification}
+                  onDenyModification={handleDenyModification}
+                  showActionsInline={false}
+                  showInput={true}
+                  inputPlaceholder="Chat here..."
+                  aboveInput={(
+                    <div className="flex flex-wrap gap-1.5 mb-4 justify-between">
+                      <button
+                        onClick={() => handleSendMessage('Review my GACIOD framework')}
+                        disabled={isLoading}
+                        title="Review"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      >
+                        <IconChecklist className="w-3.5 h-3.5" stroke={1.75} />
+                        Review
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage('Critique my GACIOD framework')}
+                        disabled={isLoading}
+                        title="Critique — Gazelle hunts for gaps, conflicts, and unclear or missing items across your framework."
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      >
+                        <IconZoomQuestion className="w-3.5 h-3.5" stroke={1.75} />
+                        Critique
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage('Suggest improvements for my GACIOD framework')}
+                        disabled={isLoading}
+                        title="Suggest — Gazelle proposes concrete edits to strengthen existing items, which you can accept or deny."
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                      >
+                        <IconSparkles className="w-3.5 h-3.5" stroke={1.75} />
+                        Suggest
+                      </button>
+                    </div>
+                  )}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Right side - Tabbed panel */}
+          {/* Resize handle */}
           <div
-            className={`${
-              showSidebar ? 'flex' : 'hidden'
-            } lg:flex w-full lg:w-72 xl:w-80 flex-col gap-3 sm:gap-4 flex-shrink-0 min-h-0 overflow-hidden max-h-[50vh] lg:max-h-none`}
-          >
-            {/* Chat / Suggestions / Context card */}
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="flex border-b border-gray-100 flex-shrink-0">
-                <button
-                  onClick={() => setActiveRightTab('context')}
-                  className={`flex-1 px-2 py-2.5 text-sm font-semibold transition-colors ${
-                    activeRightTab === 'context'
-                      ? 'text-gray-800 border-b-2 border-gray-800'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  Context
-                </button>
-                <button
-                  onClick={() => setActiveRightTab('chat')}
-                  className={`flex-1 px-2 py-2.5 text-sm font-semibold transition-colors ${
-                    activeRightTab === 'chat'
-                      ? 'text-gray-800 border-b-2 border-gray-800'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  Chat
-                </button>
-                <button
-                  onClick={() => setActiveRightTab('suggestions')}
-                  className={`flex-1 px-2 py-2.5 text-sm font-semibold transition-colors ${
-                    activeRightTab === 'suggestions'
-                      ? 'text-gray-800 border-b-2 border-gray-800'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  Suggestions
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {activeRightTab === 'chat' && (
-                  <Chat
-                    messages={messages}
-                    onSendMessage={handleSendMessage}
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    isLoading={isLoading}
-                    onAcceptImprovement={handleAcceptImprovement}
-                    onDenyImprovement={handleDenyImprovement}
-                    onAcceptModification={handleAcceptModification}
-                    onDenyModification={handleDenyModification}
-                    showActionsInline={true}
-                  />
-                )}
-                {activeRightTab === 'suggestions' && (
-                  <SuggestionsTimeline messages={messages} />
-                )}
-                {activeRightTab === 'context' && (
-                  <div className="h-full flex flex-col p-3 sm:p-4">
-                    <p className="text-xs font-normal text-gray-400 mb-3">
-                      Adding context can provide more useful insights from the
-                      assistant.
-                    </p>
-                    <textarea
-                      value={context}
-                      onChange={(e) => setContext(e.target.value)}
-                      placeholder="Add additional context..."
-                      className="flex-1 w-full px-3 py-2 text-sm font-normal text-gray-700 bg-gray-50 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-gray-300"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+            onMouseDown={startResize}
+            onDoubleClick={() => setLeftWidth(LEFT_WIDTH_DEFAULT)}
+            className="w-1.5 mx-1.5 shrink-0 cursor-col-resize rounded-full bg-transparent hover:bg-gray-300 transition-colors"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize (double-click to reset)"
+          />
+
+          {/* Right canvas - GACIOD grid */}
+          <div className="flex-1 grid grid-cols-2 grid-rows-3 gap-3 sm:gap-4 min-h-0 min-w-0 overflow-hidden">
+            {CARDS.map((c) => (
+              <GACIODCard
+                key={c.key}
+                title={c.title}
+                prefix={c.prefix}
+                color={c.color}
+                icon={c.icon}
+                subtitle={c.subtitle}
+                singular={c.singular}
+                plural={c.plural}
+                content={content[c.key]}
+                archivedContent={content[ARCHIVED_KEY[c.key]] as string}
+                onUpdate={(value) => updateContent(c.key, value)}
+                onArchive={(index) => moveItem(c.key, index, 'archive')}
+                onUnarchive={(index) => moveItem(c.key, index, 'unarchive')}
+                highlightedIndices={highlightedIndices[c.key]}
+              />
+            ))}
           </div>
         </div>
       </div>

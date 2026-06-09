@@ -1,7 +1,30 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import {
+  IconChevronDown,
+  IconNotes,
+  IconSend2,
+  IconBulb,
+  IconAlertTriangle,
+  IconSparkles,
+  IconHelpCircle,
+  IconAlertCircle,
+  IconSearch,
+  IconPencil,
+  IconQuestionMark,
+  IconClipboardList,
+  IconPoint,
+  IconPlus,
+  IconTrash,
+  IconCheck,
+  IconX,
+  IconChecklist,
+  IconZoomQuestion,
+  type TablerIcon,
+} from '@tabler/icons-react';
 
 export interface Improvement {
   category: string;
@@ -32,6 +55,8 @@ export interface Message {
   isStructured?: boolean;
   improvements?: Improvement[];
   modifications?: Modification[];
+  /** A suggested guiding question (onboarding) — rendered as a read-only card under the bubble. */
+  topicSuggestion?: string;
 }
 
 function StructuredMessage({ text }: { text: string }) {
@@ -53,7 +78,7 @@ function StructuredMessage({ text }: { text: string }) {
       case '[Conflict]':
         return 'bg-orange-50 border-orange-200';
       case '[Strength]':
-        return 'bg-green-50 border-green-200';
+        return 'bg-emerald-50 border-emerald-200';
       case '[Question]':
         return 'bg-purple-50 border-purple-200';
       case '[Consideration]':
@@ -76,7 +101,7 @@ function StructuredMessage({ text }: { text: string }) {
       case '[Conflict]':
         return 'text-orange-900';
       case '[Strength]':
-        return 'text-green-900';
+        return 'text-emerald-900';
       case '[Question]':
         return 'text-purple-900';
       case '[Consideration]':
@@ -91,27 +116,27 @@ function StructuredMessage({ text }: { text: string }) {
     }
   };
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = (category: string): TablerIcon => {
     switch (category) {
       case '[Suggestion]':
-        return '💡';
+        return IconBulb;
       case '[Concern]':
       case '[Conflict]':
-        return '⚠️';
+        return IconAlertTriangle;
       case '[Strength]':
-        return '✨';
+        return IconSparkles;
       case '[Question]':
-        return '❓';
+        return IconHelpCircle;
       case '[Consideration]':
-        return '🤔';
+        return IconAlertCircle;
       case '[Missing]':
-        return '🔍';
+        return IconSearch;
       case '[Incomplete]':
-        return '📝';
+        return IconPencil;
       case '[Unclear]':
-        return '❔';
+        return IconQuestionMark;
       default:
-        return '•';
+        return IconPoint;
     }
   };
 
@@ -135,15 +160,16 @@ function StructuredMessage({ text }: { text: string }) {
           !line.trim().startsWith('>') && !itemRefPattern.test(line.trim())
         );
 
+        const CategoryIcon = getCategoryIcon(category || '');
         return (
           <div
             key={idx}
-            className={`border rounded-lg p-3 ${getCategoryColor(category || '')}`}
+            className={`border rounded-xl p-3 ${getCategoryColor(category || '')}`}
           >
             {category && (
               <div className="flex items-center gap-1.5 mb-2">
-                <span>{getCategoryIcon(category)}</span>
-                <span className={`text-xs font-semibold ${getCategoryTextColor(category)}`}>
+                <CategoryIcon className={`w-4 h-4 ${getCategoryTextColor(category)}`} stroke={2} />
+                <span className={`font-display text-sm ${getCategoryTextColor(category)}`}>
                   {category.replace('[', '').replace(']', '')}
                 </span>
               </div>
@@ -176,10 +202,10 @@ function StructuredMessage({ text }: { text: string }) {
 
       {/* Summary section - rendered separately */}
       {summaryText && (
-        <div className="border rounded-lg p-3 bg-gray-50 border-gray-200 mt-3">
+        <div className="border rounded-xl p-3 bg-gray-50 border-gray-200 mt-3">
           <div className="flex items-center gap-1.5 mb-2">
-            <span>📋</span>
-            <span className="text-xs font-semibold text-gray-800">Summary</span>
+            <IconClipboardList className="w-4 h-4 text-gray-700" stroke={2} />
+            <span className="font-display text-sm text-gray-800">Summary</span>
           </div>
           <p className="text-sm font-normal text-gray-900 break-words whitespace-pre-wrap leading-relaxed">
             {summaryText}
@@ -200,36 +226,41 @@ function ImprovementCard({
   onDeny: () => void;
 }) {
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div className="p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
       <div className="mb-3">
-        <p className="text-xs font-semibold text-gray-800 mb-1">
-          Suggested improvement for {improvement.category}:
-        </p>
+        <div className="flex items-center gap-1.5 mb-1">
+          <IconSparkles className="w-4 h-4 text-emerald-600 shrink-0" stroke={2} />
+          <span className="font-display text-sm text-gray-800">
+            Improve {improvement.category}
+          </span>
+        </div>
         {improvement.explanation && (
           <p className="text-xs font-normal text-gray-600 mb-2 italic">{improvement.explanation}</p>
         )}
         <div className="text-sm space-y-2">
           <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-            <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Current</span>
+            <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Current</span>
             <div className="text-red-950 font-normal mt-1 leading-relaxed">{improvement.originalText}</div>
           </div>
-          <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-            <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Suggested</span>
-            <div className="text-green-950 font-normal mt-1 leading-relaxed">{improvement.newText}</div>
+          <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+            <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Suggested</span>
+            <div className="text-emerald-950 font-normal mt-1 leading-relaxed">{improvement.newText}</div>
           </div>
         </div>
       </div>
       <div className="flex gap-2">
         <button
           onClick={() => onAccept(improvement)}
-          className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded hover:bg-green-800 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
         >
+          <IconCheck className="w-3.5 h-3.5" stroke={2} />
           Accept
         </button>
         <button
           onClick={onDeny}
-          className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300 hover:bg-gray-200 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
         >
+          <IconX className="w-3.5 h-3.5" stroke={2} />
           Deny
         </button>
       </div>
@@ -246,49 +277,35 @@ function ModificationCard({
   onAccept: (modification: Modification) => void;
   onDeny: () => void;
 }) {
-  const getOperationColor = () => {
-    switch (modification.operation) {
-      case 'ADD':
-        return 'bg-green-50 border-green-200';
-      case 'UPDATE':
-        return 'bg-indigo-50 border-indigo-200';
-      case 'DELETE':
-        return 'bg-red-50 border-red-200';
-    }
-  };
-
   const getOperationHeaderColor = () => {
     switch (modification.operation) {
       case 'ADD':
-        return 'text-green-800';
+        return 'text-emerald-700';
       case 'UPDATE':
-        return 'text-indigo-800';
+        return 'text-indigo-700';
       case 'DELETE':
-        return 'text-red-800';
+        return 'text-red-700';
     }
   };
 
-  const getOperationIcon = () => {
-    switch (modification.operation) {
-      case 'ADD':
-        return '➕';
-      case 'UPDATE':
-        return '✏️';
-      case 'DELETE':
-        return '🗑️';
-    }
+  const operationIconMap: Record<ModificationOperation, TablerIcon> = {
+    ADD: IconPlus,
+    UPDATE: IconPencil,
+    DELETE: IconTrash,
   };
 
   const getCategoryName = (category: string) => {
     return category.charAt(0).toUpperCase() + category.slice(1);
   };
 
+  const OperationIcon = operationIconMap[modification.operation];
+
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div className="p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
       <div className="mb-3">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm" role="img" aria-label={modification.operation.toLowerCase()}>{getOperationIcon()}</span>
-          <span className={`text-xs font-semibold ${getOperationHeaderColor()}`}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <OperationIcon className={`w-4 h-4 shrink-0 ${getOperationHeaderColor()}`} stroke={2} />
+          <span className={`font-display text-sm ${getOperationHeaderColor()}`}>
             {modification.operation} in {getCategoryName(modification.category)}
             {modification.label && ` (${modification.label})`}
           </span>
@@ -302,7 +319,7 @@ function ModificationCard({
         <div className="text-sm space-y-2">
           {modification.operation === 'DELETE' && modification.currentText && (
             <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-              <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Remove</span>
+              <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Remove</span>
               <div className="text-red-950 font-normal mt-1 leading-relaxed">
                 {modification.currentText}
               </div>
@@ -313,16 +330,16 @@ function ModificationCard({
             <>
               {modification.currentText && (
                 <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-                  <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Current</span>
+                  <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Current</span>
                   <div className="text-red-950 font-normal mt-1 leading-relaxed">
                     {modification.currentText}
                   </div>
                 </div>
               )}
               {modification.newText && (
-                <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-                  <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Replace with</span>
-                  <div className="text-green-950 font-normal mt-1 leading-relaxed">
+                <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+                  <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Replace with</span>
+                  <div className="text-emerald-950 font-normal mt-1 leading-relaxed">
                     {modification.newText}
                   </div>
                 </div>
@@ -331,9 +348,9 @@ function ModificationCard({
           )}
 
           {modification.operation === 'ADD' && modification.newText && (
-            <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-              <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Add</span>
-              <div className="text-green-950 font-normal mt-1 leading-relaxed">
+            <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+              <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Add</span>
+              <div className="text-emerald-950 font-normal mt-1 leading-relaxed">
                 {modification.newText}
               </div>
             </div>
@@ -344,17 +361,89 @@ function ModificationCard({
       <div className="flex gap-2">
         <button
           onClick={() => onAccept(modification)}
-          className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded hover:bg-green-800 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
         >
+          <IconCheck className="w-3.5 h-3.5" stroke={2} />
           Accept
         </button>
         <button
           onClick={onDeny}
-          className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300 hover:bg-gray-200 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
         >
+          <IconX className="w-3.5 h-3.5" stroke={2} />
           Deny
         </button>
       </div>
+    </div>
+  );
+}
+
+export interface ResolvedChip {
+  key: React.Key;
+  label: string;
+  accepted: boolean;
+}
+
+/** Collapsed summary of resolved (accepted/denied) items — expands to show per-item chips. */
+export function ResolvedSummary({
+  items,
+  verb,
+  noun,
+}: {
+  items: ResolvedChip[];
+  verb: string;
+  noun: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const accepted = items.filter((i) => i.accepted).length;
+  const denied = items.length - accepted;
+  const plural = (n: number) => (n === 1 ? '' : 's');
+  const summary =
+    accepted > 0
+      ? `${verb} ${accepted} ${noun}${plural(accepted)}`
+      : `Dismissed ${denied} ${noun}${plural(denied)}`;
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        {accepted > 0 ? (
+          <IconCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" stroke={2} />
+        ) : (
+          <IconX className="w-3.5 h-3.5 text-gray-400 shrink-0" stroke={2} />
+        )}
+        <span className="font-medium">{summary}</span>
+        {accepted > 0 && denied > 0 && (
+          <span className="text-gray-400">· {denied} dismissed</span>
+        )}
+        <IconChevronDown
+          className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          stroke={2}
+        />
+      </button>
+      {expanded && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {items.map((i) => (
+            <span
+              key={i.key}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] ${
+                i.accepted
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-gray-100 text-gray-400 line-through'
+              }`}
+            >
+              {i.accepted ? (
+                <IconCheck className="w-3 h-3 shrink-0" stroke={2.5} />
+              ) : (
+                <IconX className="w-3 h-3 shrink-0" stroke={2.5} />
+              )}
+              {i.label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -370,6 +459,14 @@ interface ChatProps {
   onAcceptModification?: (modification: Modification) => void;
   onDenyModification?: (messageId: string, modificationIndex: number) => void;
   showActionsInline?: boolean;
+  showInput?: boolean;
+  inputPlaceholder?: string;
+  /** Optional node rendered at the end of the scrollable message area (e.g. a suggested-topic card). */
+  footer?: React.ReactNode;
+  /** Optional node rendered below the input, separated by a divider (e.g. quick actions). */
+  belowInput?: React.ReactNode;
+  /** Optional node floated just above the input area (e.g. quick action chips). */
+  aboveInput?: React.ReactNode;
 }
 
 export default function Chat({
@@ -382,12 +479,31 @@ export default function Chat({
   onDenyImprovement,
   onAcceptModification,
   onDenyModification,
-  showActionsInline = true
+  showActionsInline = true,
+  showInput = true,
+  inputPlaceholder = 'Type a message...',
+  footer,
+  belowInput,
+  aboveInput,
 }: ChatProps) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const autoSizeInput = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  // Keep the latest message / thinking indicator in view as the conversation grows.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, isLoading]);
+
   const handleSend = () => {
     if (!inputValue.trim()) return;
     onSendMessage(inputValue);
     setInputValue('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -410,19 +526,31 @@ export default function Chat({
             <div
               key={message.id}
               className={`flex ${
-                message.sender === 'user' ? 'justify-end' : 'justify-start'
+                message.sender === 'user'
+                  ? 'justify-end'
+                  : message.sender === 'system'
+                  ? 'justify-center'
+                  : 'justify-start'
               }`}
             >
               <div className={`flex flex-col gap-1 ${
-                message.sender === 'user' ? 'items-end max-w-[85%]' : 'items-start max-w-full'
+                message.sender === 'user'
+                  ? 'items-end max-w-[85%]'
+                  : message.sender === 'system'
+                  ? 'items-center max-w-full'
+                  : 'items-start max-w-full'
               }`}>
                 {message.isStructured ? (
                   <div className="w-full">
                     <StructuredMessage text={message.text} />
                   </div>
+                ) : message.sender === 'system' ? (
+                  <div className="text-gray-500 text-xs font-medium text-center">
+                    {message.text}
+                  </div>
                 ) : (
                   <div
-                    className={`break-words ${
+                    className={`wrap-break-word ${
                       message.sender === 'user' ? '' : 'max-w-[85%]'
                     } ${
                       message.isQuote
@@ -430,8 +558,6 @@ export default function Chat({
                         : `px-3 py-2 rounded-lg ${
                             message.sender === 'user'
                               ? 'bg-gray-900 text-white rounded-br-sm'
-                              : message.sender === 'system'
-                              ? 'bg-gray-100 text-gray-700 border border-gray-200'
                               : 'bg-gray-100 text-gray-900 rounded-bl-sm'
                           }`
                     }`}
@@ -450,57 +576,112 @@ export default function Chat({
                   </div>
                 )}
                 {/* Improvement cards */}
-                {message.improvements && message.improvements.length > 0 && (
-                  <div className="w-full space-y-2 mt-1">
-                    {message.improvements.map((improvement, idx) => {
-                      const status = improvement.status ?? 'pending';
-                      if (status === 'pending' && onAcceptImprovement && onDenyImprovement) {
-                        return (
-                          <ImprovementCard
-                            key={idx}
-                            improvement={improvement}
-                            onAccept={onAcceptImprovement}
-                            onDeny={() => onDenyImprovement(message.id, idx)}
-                          />
-                        );
-                      }
-                      return (
-                        <div key={idx} className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
-                          status === 'accepted' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'
-                        }`}>
-                          <span>{status === 'accepted' ? '✓' : '✗'}</span>
-                          <span className="font-semibold">{status === 'accepted' ? 'Accepted' : 'Denied'}:</span>
-                          <span>{improvement.category} improvement</span>
+                {message.improvements && message.improvements.length > 0 && (() => {
+                  const items = message.improvements.map((improvement, idx) => ({ improvement, idx }));
+                  const pending = items.filter(({ improvement }) => (improvement.status ?? 'pending') === 'pending');
+                  const resolved = items.filter(({ improvement }) => (improvement.status ?? 'pending') !== 'pending');
+                  const canAct = !!(onAcceptImprovement && onDenyImprovement);
+                  return (
+                    <div className="w-full mt-1 space-y-2">
+                      {canAct && pending.length > 1 && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-gray-500">{pending.length} suggested improvements</span>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => pending.forEach(({ improvement }) => onAcceptImprovement!(improvement))}
+                              className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                            >
+                              Accept all
+                            </button>
+                            <button
+                              onClick={() => pending.forEach(({ idx }) => onDenyImprovement!(message.id, idx))}
+                              className="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 transition-colors"
+                            >
+                              Deny all
+                            </button>
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+                      {canAct && pending.map(({ improvement, idx }) => (
+                        <ImprovementCard
+                          key={idx}
+                          improvement={improvement}
+                          onAccept={onAcceptImprovement!}
+                          onDeny={() => onDenyImprovement!(message.id, idx)}
+                        />
+                      ))}
+                      {resolved.length > 0 && (
+                        <ResolvedSummary
+                          verb="Applied"
+                          noun="improvement"
+                          items={resolved.map(({ improvement, idx }) => ({
+                            key: idx,
+                            label: improvement.category,
+                            accepted: (improvement.status ?? 'pending') === 'accepted',
+                          }))}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* Modification cards */}
-                {message.modifications && message.modifications.length > 0 && (
-                  <div className="w-full space-y-2 mt-1">
-                    {message.modifications.map((modification, idx) => {
-                      const status = modification.status ?? 'pending';
-                      if (status === 'pending' && onAcceptModification && onDenyModification) {
-                        return (
-                          <ModificationCard
-                            key={idx}
-                            modification={modification}
-                            onAccept={onAcceptModification}
-                            onDeny={() => onDenyModification(message.id, idx)}
-                          />
-                        );
-                      }
-                      return (
-                        <div key={idx} className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${
-                          status === 'accepted' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'
-                        }`}>
-                          <span>{status === 'accepted' ? '✓' : '✗'}</span>
-                          <span className="font-semibold">{status === 'accepted' ? 'Accepted' : 'Denied'}:</span>
-                          <span>{modification.operation} in {modification.category}</span>
+                {message.modifications && message.modifications.length > 0 && (() => {
+                  const items = message.modifications.map((modification, idx) => ({ modification, idx }));
+                  const pending = items.filter(({ modification }) => (modification.status ?? 'pending') === 'pending');
+                  const resolved = items.filter(({ modification }) => (modification.status ?? 'pending') !== 'pending');
+                  const canAct = !!(onAcceptModification && onDenyModification);
+                  return (
+                    <div className="w-full mt-1 space-y-2">
+                      {canAct && pending.length > 1 && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-gray-500">{pending.length} proposed changes</span>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => pending.forEach(({ modification }) => onAcceptModification!(modification))}
+                              className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                            >
+                              Accept all
+                            </button>
+                            <button
+                              onClick={() => pending.forEach(({ idx }) => onDenyModification!(message.id, idx))}
+                              className="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 transition-colors"
+                            >
+                              Deny all
+                            </button>
+                          </div>
                         </div>
-                      );
-                    })}
+                      )}
+                      {canAct && pending.map(({ modification, idx }) => (
+                        <ModificationCard
+                          key={idx}
+                          modification={modification}
+                          onAccept={onAcceptModification!}
+                          onDeny={() => onDenyModification!(message.id, idx)}
+                        />
+                      ))}
+                      {resolved.length > 0 && (
+                        <ResolvedSummary
+                          verb="Added"
+                          noun="item"
+                          items={resolved.map(({ modification, idx }) => ({
+                            key: idx,
+                            label: `${modification.operation} ${modification.category}`,
+                            accepted: (modification.status ?? 'pending') === 'accepted',
+                          }))}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
+                {/* Suggested topic (onboarding) — stays in the conversation history */}
+                {message.topicSuggestion && (
+                  <div className="w-full mt-1 border border-emerald-200 bg-white rounded-xl p-3 flex items-start gap-2.5">
+                    <IconNotes className="w-5 h-5 mt-0.5 shrink-0 text-emerald-500" stroke={2} />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-display text-base leading-tight text-emerald-700">Suggested topic</h4>
+                      <p className="text-sm font-normal text-gray-800 leading-snug mt-1.5 whitespace-pre-wrap break-words">{message.topicSuggestion}</p>
+                      <p className="text-xs text-gray-400 mt-2">Reply below to confirm, or tell me what to change.</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -521,30 +702,45 @@ export default function Chat({
             </div>
           </div>
         )}
+        {footer}
+        <div ref={bottomRef} />
       </div>
 
+        {/* Below-input slot (e.g. quick actions), divided from the input */}
+        {belowInput && (
+          <div className="p-2 border-t-[3.5px] border-gray-100">
+            {belowInput}
+          </div>
+        )}
+
       {/* Input area */}
-      <div className="border-t border-gray-100 p-2 shrink-0">
-        <div className="flex gap-2">
+      {showInput && (
+      <div className="border-t-[3.5px] border-gray-100 p-2 shrink-0">
+        <div className="px-2 pt-1.5 shrink-0">
+          {aboveInput}
+        </div>
+        <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => { setInputValue(e.target.value); autoSizeInput(e.currentTarget); }}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            className="flex-1 resize-none border border-gray-200 rounded-lg px-3 py-2 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent bg-gray-50"
+            placeholder={inputPlaceholder}
+            className="flex-1 min-w-0 max-h-40 overflow-y-auto resize-none border border-gray-200 rounded-lg px-3 py-2 text-sm font-normal leading-snug focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent bg-gray-50"
             rows={1}
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            className="px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            className="shrink-0 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-1.5"
           >
+            <IconSend2 className="w-4 h-4" stroke={1.5} />
             {isLoading ? '...' : 'Send'}
           </button>
         </div>
 
         {/* Quick action cards - only show if showActionsInline is true */}
-        {showActionsInline && (
+        {/* {showActionsInline && (
           <div className="grid grid-cols-3 gap-1.5 mt-3">
             <button
               onClick={() => {
@@ -553,21 +749,8 @@ export default function Chat({
               disabled={isLoading}
               className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-3.5 h-3.5 text-blue-600 shrink-0"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
-                />
-              </svg>
-              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Review</span>
+              <IconChecklist className="w-3.5 h-3.5 text-blue-600 shrink-0" stroke={2} />
+              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Review</span>
             </button>
             <button
               onClick={() => {
@@ -576,21 +759,8 @@ export default function Chat({
               disabled={isLoading}
               className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-3.5 h-3.5 text-orange-600 shrink-0"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6"
-                />
-              </svg>
-              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Gaps</span>
+              <IconZoomQuestion className="w-3.5 h-3.5 text-orange-600 shrink-0" stroke={2} />
+              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Gaps</span>
             </button>
             <button
               onClick={() => {
@@ -599,25 +769,13 @@ export default function Chat({
               disabled={isLoading}
               className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-3.5 h-3.5 text-green-600 shrink-0"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
-                />
-              </svg>
-              <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Improve</span>
+              <IconSparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" stroke={2} />
+              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Improve</span>
             </button>
           </div>
-        )}
+        )} */}
       </div>
+      )}
     </div>
   );
 }

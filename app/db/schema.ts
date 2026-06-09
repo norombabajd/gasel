@@ -267,6 +267,7 @@ export const matrices = pgTable(
     title: text(),
     question: text(),
     context: text(),
+    onboarded: boolean('onboarded').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }),
   },
@@ -290,6 +291,7 @@ export const matrixItems = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }),
     aiGenerated: boolean('ai_generated').notNull().default(false),
+    archived: boolean('archived').notNull().default(false),
   },
   (table) => [
     foreignKey({

@@ -5,6 +5,28 @@ import SuggestionsTimeline from '@/components/SuggestionsTimeline';
 import GACIODCard from '@/components/GACIODCard';
 import ChatSidebar from '@/components/ChatSidebar';
 import { useState } from 'react';
+import {
+  IconTarget,
+  IconHelpCircle,
+  IconLock,
+  IconBulb,
+  IconMessageCircle,
+  IconFlagCheck,
+  IconChecklist,
+  IconZoomQuestion,
+  IconSparkles,
+  IconCheck,
+  IconX,
+  IconPointFilled,
+  IconAlertTriangle,
+  IconAlertCircle,
+  IconSearch,
+  IconQuestionMark,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+  type TablerIcon,
+} from '@tabler/icons-react';
 
 // ---------------------------------------------------------------------------
 // Sample data for showcasing every UI element
@@ -172,7 +194,7 @@ export default function DebugMessagesClient() {
     <div className="min-h-screen bg-[#E8EDF2]">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-lg font-bold text-gray-900">Debug: Chat UI/UX Elements</h1>
+        <h1 className="font-display text-2xl tracking-tight text-gray-900">Debug: Chat UI/UX Elements</h1>
         <p className="text-sm text-gray-500 mt-1">
           All interactive chat components rendered with sample data. No API calls are made.
         </p>
@@ -188,7 +210,7 @@ export default function DebugMessagesClient() {
             title="Chat Component"
             description="The full Chat component with all message types: user, assistant (plain + markdown), system, structured feedback, improvements, and modifications."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-[700px] overflow-hidden">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-[700px] overflow-hidden">
             <Chat
               messages={sampleMessages}
               onSendMessage={(text) => console.log('[debug] send:', text)}
@@ -212,7 +234,7 @@ export default function DebugMessagesClient() {
             title="Chat — Loading State"
             description="The animated 'Thinking...' indicator shown while waiting for an AI response."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-48 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-48 overflow-hidden">
             <Chat
               messages={[
                 { id: 'u-loading', text: 'Find gaps in my GACIOD framework', sender: 'user', timestamp: Date.now() },
@@ -234,7 +256,7 @@ export default function DebugMessagesClient() {
             title="Chat — Empty State"
             description="Shown when no messages have been sent yet."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-48 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-48 overflow-hidden">
             <Chat
               messages={[]}
               onSendMessage={() => {}}
@@ -254,11 +276,11 @@ export default function DebugMessagesClient() {
             title="Structured Feedback Cards"
             description="All 9 feedback categories: Suggestion, Strength, Concern, Question, Consideration, Missing, Conflict, Unclear, Incomplete — each with distinct colour and icon."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { type: 'Suggestion', text: 'Consider adding rate limiting to your matchmaking API.', color: 'bg-blue-50 border-blue-200', textColor: 'text-blue-900', icon: '\u{1f4a1}' },
-                { type: 'Strength', text: 'Your constraint on queue times is well-defined and measurable.', color: 'bg-green-50 border-green-200', textColor: 'text-green-900', icon: '\u2728' },
+                { type: 'Strength', text: 'Your constraint on queue times is well-defined and measurable.', color: 'bg-emerald-50 border-emerald-200', textColor: 'text-emerald-900', icon: '\u2728' },
                 { type: 'Concern', text: 'Skill-based matching may cause long queues in low-population regions.', color: 'bg-orange-50 border-orange-200', textColor: 'text-orange-900', icon: '\u26a0\ufe0f' },
                 { type: 'Question', text: 'How will you handle players who disconnect mid-match?', color: 'bg-purple-50 border-purple-200', textColor: 'text-purple-900', icon: '\u2753' },
                 { type: 'Consideration', text: 'Time-of-day effects on matchmaking pool size should be modelled.', color: 'bg-yellow-50 border-yellow-200', textColor: 'text-yellow-900', icon: '\u{1f914}' },
@@ -266,15 +288,29 @@ export default function DebugMessagesClient() {
                 { type: 'Conflict', text: 'Strict matching and fast queues are at odds — needs resolution.', color: 'bg-orange-50 border-orange-200', textColor: 'text-orange-900', icon: '\u26a0\ufe0f' },
                 { type: 'Unclear', text: 'It is ambiguous whether "region" means continent or data-centre.', color: 'bg-gray-50 border-gray-300', textColor: 'text-gray-800', icon: '\u2754' },
                 { type: 'Incomplete', text: 'The anti-cheat constraint lacks specifics on detection methods.', color: 'bg-red-50 border-red-200', textColor: 'text-red-900', icon: '\u{1f4dd}' },
-              ].map(({ type, text, color, textColor, icon }) => (
-                <div key={type} className={`border rounded-lg p-3 ${color}`}>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <span>{icon}</span>
-                    <span className={`text-xs font-semibold ${textColor}`}>{type}</span>
+              ].map(({ type, text, color, textColor }) => {
+                const iconMap: Record<string, TablerIcon> = {
+                  Suggestion: IconBulb,
+                  Strength: IconSparkles,
+                  Concern: IconAlertTriangle,
+                  Question: IconHelpCircle,
+                  Consideration: IconAlertCircle,
+                  Missing: IconSearch,
+                  Conflict: IconAlertTriangle,
+                  Unclear: IconQuestionMark,
+                  Incomplete: IconPencil,
+                };
+                const Icon = iconMap[type] ?? IconBulb;
+                return (
+                  <div key={type} className={`border rounded-xl p-3 ${color}`}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Icon className={`w-4 h-4 ${textColor}`} stroke={2} />
+                      <span className={`font-display text-sm ${textColor}`}>{type}</span>
+                    </div>
+                    <p className="text-sm font-normal text-gray-900">{text}</p>
                   </div>
-                  <p className="text-sm font-normal text-gray-900">{text}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -287,47 +323,44 @@ export default function DebugMessagesClient() {
             title="Improvement Cards"
             description="Before/after text improvements with Accept/Deny actions and all three status states (pending, accepted, denied)."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6 space-y-4">
             {/* Pending */}
             <div>
               <Badge label="Pending" color="bg-amber-100 text-amber-700" />
-              <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="mt-2 p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                 <div className="mb-3">
-                  <p className="text-xs font-semibold text-gray-800 mb-1">Suggested improvement for Goals:</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <IconSparkles className="w-4 h-4 text-emerald-600 shrink-0" stroke={2} />
+                    <span className="font-display text-sm text-gray-800">Improve Goals</span>
+                  </div>
                   <p className="text-xs font-normal text-gray-600 mb-2 italic">Making the goal measurable makes it easier to verify.</p>
                   <div className="text-sm space-y-2">
                     <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-                      <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Current</span>
+                      <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Current</span>
                       <div className="text-red-950 font-normal mt-1 leading-relaxed">Fair matchmaking for all players</div>
                     </div>
-                    <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-                      <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Suggested</span>
-                      <div className="text-green-950 font-normal mt-1 leading-relaxed">Ensure equitable match outcomes by pairing players within a 200-point MMR band</div>
+                    <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+                      <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Suggested</span>
+                      <div className="text-emerald-950 font-normal mt-1 leading-relaxed">Ensure equitable match outcomes by pairing players within a 200-point MMR band</div>
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded hover:bg-green-800 transition-colors">Accept</button>
-                  <button className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300 hover:bg-gray-200 transition-colors">Deny</button>
+                  <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                  <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                 </div>
               </div>
             </div>
-            {/* Accepted */}
+            {/* Accepted / Denied — compact resolved chips (wrap when there are many) */}
             <div>
-              <Badge label="Accepted" color="bg-green-100 text-green-700" />
-              <div className="mt-2 p-2 rounded-lg text-xs flex items-center gap-1.5 bg-green-50 text-green-700">
-                <span>&#10003;</span>
-                <span className="font-semibold">Accepted:</span>
-                <span>Assumptions improvement</span>
-              </div>
-            </div>
-            {/* Denied */}
-            <div>
-              <Badge label="Denied" color="bg-gray-100 text-gray-500" />
-              <div className="mt-2 p-2 rounded-lg text-xs flex items-center gap-1.5 bg-gray-50 text-gray-500">
-                <span>&#10007;</span>
-                <span className="font-semibold">Denied:</span>
-                <span>Constraints improvement</span>
+              <Badge label="Resolved (compact chips)" color="bg-gray-100 text-gray-600" />
+              <div className="mt-2 flex flex-wrap gap-1">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-emerald-50 text-emerald-700">
+                  <IconCheck className="w-3 h-3 shrink-0" stroke={2.5} /> Assumptions
+                </span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-400 line-through">
+                  <IconX className="w-3 h-3 shrink-0" stroke={2.5} /> Constraints
+                </span>
               </div>
             </div>
           </div>
@@ -341,74 +374,74 @@ export default function DebugMessagesClient() {
             title="Modification Cards"
             description="ADD, UPDATE, and DELETE modification cards with their distinct visual styles and status badges."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* ADD */}
               <div>
-                <Badge label="ADD (pending)" color="bg-green-100 text-green-700" />
-                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <Badge label="ADD (pending)" color="bg-emerald-100 text-emerald-700" />
+                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                   <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">&#10133;</span>
-                      <span className="text-xs font-semibold text-green-800">ADD in Goals</span>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <IconPlus className="w-4 h-4 text-emerald-700 shrink-0" stroke={2} />
+                      <span className="font-display text-sm text-emerald-700">ADD in Goals</span>
                     </div>
                     <p className="text-xs font-normal text-gray-600 mb-2 italic">A core goal for matchmaking.</p>
-                    <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-                      <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Add</span>
-                      <div className="text-green-950 font-normal mt-1 leading-relaxed text-sm">Minimise skill disparity between teams</div>
+                    <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+                      <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Add</span>
+                      <div className="text-emerald-950 font-normal mt-1 leading-relaxed text-sm">Minimise skill disparity between teams</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded">Accept</button>
-                    <button className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300">Deny</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                   </div>
                 </div>
               </div>
               {/* UPDATE */}
               <div>
                 <Badge label="UPDATE (pending)" color="bg-indigo-100 text-indigo-700" />
-                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                   <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">&#9999;&#65039;</span>
-                      <span className="text-xs font-semibold text-indigo-800">UPDATE in Constraints (C-01)</span>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <IconPencil className="w-4 h-4 text-indigo-700 shrink-0" stroke={2} />
+                      <span className="font-display text-sm text-indigo-700">UPDATE in Constraints (C-01)</span>
                     </div>
                     <p className="text-xs font-normal text-gray-600 mb-2 italic">Quantifying the constraint.</p>
                     <div className="text-sm space-y-2">
                       <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-                        <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Current</span>
+                        <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Current</span>
                         <div className="text-red-950 font-normal mt-1 leading-relaxed">Low latency queue times</div>
                       </div>
-                      <div className="bg-green-50 border-l-3 border-green-500 rounded-r p-2.5">
-                        <span className="text-xs font-semibold text-green-900 uppercase tracking-wide">Replace with</span>
-                        <div className="text-green-950 font-normal mt-1 leading-relaxed">Queue times under 60s at the 95th percentile</div>
+                      <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
+                        <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Replace with</span>
+                        <div className="text-emerald-950 font-normal mt-1 leading-relaxed">Queue times under 60s at the 95th percentile</div>
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded">Accept</button>
-                    <button className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300">Deny</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                   </div>
                 </div>
               </div>
               {/* DELETE */}
               <div>
                 <Badge label="DELETE (pending)" color="bg-red-100 text-red-700" />
-                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <div className="mt-2 p-3 bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                   <div className="mb-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">&#128465;&#65039;</span>
-                      <span className="text-xs font-semibold text-red-800">DELETE in Ideas (I-03)</span>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <IconTrash className="w-4 h-4 text-red-700 shrink-0" stroke={2} />
+                      <span className="font-display text-sm text-red-700">DELETE in Ideas (I-03)</span>
                     </div>
                     <p className="text-xs font-normal text-gray-600 mb-2 italic">Random matchmaking undermines fairness.</p>
                     <div className="bg-red-50 border-l-3 border-red-400 rounded-r p-2.5">
-                      <span className="text-xs font-semibold text-red-900 uppercase tracking-wide">Remove</span>
+                      <span className="text-[10px] font-semibold text-red-900 uppercase tracking-wide">Remove</span>
                       <div className="text-red-950 font-normal mt-1 leading-relaxed text-sm">Use random matchmaking as fallback</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 px-3 py-1.5 bg-green-700 text-white text-xs font-semibold rounded">Accept</button>
-                    <button className="flex-1 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs font-semibold rounded border border-gray-300">Deny</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                   </div>
                 </div>
               </div>
@@ -424,7 +457,7 @@ export default function DebugMessagesClient() {
             title="Suggestions Timeline"
             description="Chronological list of all improvements and modifications with their status badges (pending, accepted, denied)."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-[500px] overflow-hidden">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-[500px] overflow-hidden">
             <SuggestionsTimeline messages={sampleMessages} />
           </div>
         </section>
@@ -444,6 +477,12 @@ export default function DebugMessagesClient() {
                 content={gaciodContent.goals}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, goals: v }))}
                 highlightedIndices={[0, 2]}
+                color="green"
+                icon={IconTarget}
+                subtitle="What are the outcomes you are designing towards?"
+                prefix="G"
+                singular="goal"
+                plural="goals"
               />
             </div>
             <div className="h-56">
@@ -452,6 +491,12 @@ export default function DebugMessagesClient() {
                 content={gaciodContent.assumptions}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, assumptions: v }))}
                 highlightedIndices={[1]}
+                color="yellow"
+                icon={IconHelpCircle}
+                subtitle="What are you treating as true without full evidence?"
+                prefix="A"
+                singular="assumption"
+                plural="assumptions"
               />
             </div>
             <div className="h-56">
@@ -460,6 +505,12 @@ export default function DebugMessagesClient() {
                 content={gaciodContent.constraints}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, constraints: v }))}
                 highlightedIndices={[0]}
+                color="red"
+                icon={IconLock}
+                subtitle="What limits our solution space?"
+                prefix="C"
+                singular="constraint"
+                plural="constraints"
               />
             </div>
             <div className="h-56">
@@ -468,6 +519,12 @@ export default function DebugMessagesClient() {
                 content={gaciodContent.ideas}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, ideas: v }))}
                 highlightedIndices={[]}
+                color="violet"
+                icon={IconBulb}
+                subtitle="What approaches are worth exploring?"
+                prefix="I"
+                singular="idea"
+                plural="ideas"
               />
             </div>
             <div className="h-56">
@@ -476,14 +533,26 @@ export default function DebugMessagesClient() {
                 content={gaciodContent.opinions}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, opinions: v }))}
                 highlightedIndices={[]}
+                color="orange"
+                icon={IconMessageCircle}
+                subtitle="What do we think, but can't prove?"
+                prefix="O"
+                singular="opinion"
+                plural="opinions"
               />
             </div>
             <div className="h-56">
               <GACIODCard
-                title="Decisions"
+                title="Decision + Rationale"
                 content={gaciodContent.decisions}
                 onUpdate={(v) => setGaciodContent((prev) => ({ ...prev, decisions: v }))}
                 highlightedIndices={[]}
+                color="blue"
+                icon={IconFlagCheck}
+                subtitle="What have we committed to and why?"
+                prefix="D"
+                singular="decision"
+                plural="decisions"
               />
             </div>
           </div>
@@ -497,7 +566,7 @@ export default function DebugMessagesClient() {
             title="Chat Sidebar"
             description="Session list with icon rail, hamburger toggle, new-chat button, session items (with hover delete), and user profile dropdown. Note: user profile requires auth context so it will not render here."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 h-96 overflow-hidden flex">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-96 overflow-hidden flex">
             <ChatSidebar
               sessions={sampleSessions as any}
               activeSessionId="1"
@@ -522,25 +591,19 @@ export default function DebugMessagesClient() {
             title="Quick Action Buttons"
             description="The three shortcut buttons below the chat input: Review, Gaps, Improve."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6">
             <div className="grid grid-cols-3 gap-1.5 max-w-md">
               <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-blue-600 shrink-0">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-                </svg>
-                <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Review</span>
+                <IconChecklist className="w-3.5 h-3.5 text-blue-600 shrink-0" stroke={2} />
+                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Review</span>
               </button>
               <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-orange-600 shrink-0">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-                <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Gaps</span>
+                <IconZoomQuestion className="w-3.5 h-3.5 text-orange-600 shrink-0" stroke={2} />
+                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Gaps</span>
               </button>
               <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-green-600 shrink-0">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                </svg>
-                <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Improve</span>
+                <IconSparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" stroke={2} />
+                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Improve</span>
               </button>
             </div>
           </div>
@@ -554,15 +617,15 @@ export default function DebugMessagesClient() {
             title="Status Badges"
             description="The three status states used across improvements, modifications, and the suggestions timeline."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex gap-4 flex-wrap">
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-              &#9679; Pending
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6 flex gap-4 flex-wrap">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-700">
+              <IconPointFilled className="w-3 h-3" /> Pending
             </span>
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
-              &#10003; Accepted
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+              <IconCheck className="w-3 h-3" stroke={2.5} /> Accepted
             </span>
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500">
-              &#10007; Denied
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500">
+              <IconX className="w-3 h-3" stroke={2.5} /> Denied
             </span>
           </div>
         </section>
@@ -575,7 +638,7 @@ export default function DebugMessagesClient() {
             title="Message Bubble Variants"
             description="Individual message bubble styles: user, assistant, system, and quote."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6 space-y-4">
             {/* User */}
             <div className="flex justify-end">
               <div className="px-3 py-2 rounded-lg rounded-br-sm bg-gray-900 text-white max-w-[85%]">
@@ -588,10 +651,10 @@ export default function DebugMessagesClient() {
                 <p className="text-sm font-normal">This is an assistant message bubble.</p>
               </div>
             </div>
-            {/* System */}
-            <div className="flex justify-start">
-              <div className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 border border-gray-200 max-w-[85%]">
-                <p className="text-sm font-normal">This is a system message bubble.</p>
+            {/* System — centered, muted notice (e.g. "Workspace shared.") */}
+            <div className="flex justify-center">
+              <div className="bg-gray-100 text-gray-500 text-xs font-medium rounded-md px-3 py-1.5 max-w-[90%] text-center">
+                This is a system notice.
               </div>
             </div>
             {/* Quote */}
@@ -611,7 +674,7 @@ export default function DebugMessagesClient() {
             title="Chat Input Area"
             description="Text input with send button, both enabled and disabled states."
           />
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6 space-y-4">
             {/* Active */}
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active (with text)</p>
             <div className="border-t border-gray-100 p-2">
@@ -658,7 +721,7 @@ export default function DebugMessagesClient() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div className="mb-4">
-      <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+      <h2 className="font-display text-lg tracking-tight text-gray-900">{title}</h2>
       <p className="text-sm text-gray-500 mt-0.5">{description}</p>
     </div>
   );

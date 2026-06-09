@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
+import { IconCheck, IconX, IconPointFilled } from '@tabler/icons-react';
+import { ResolvedSummary } from './Chat';
 import type { Message, Improvement, Modification } from './Chat';
 
 interface SuggestionEntry {
@@ -29,20 +31,20 @@ function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'accepted':
       return (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
-          ✓ Accepted
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+          <IconCheck className="w-3 h-3" stroke={2.5} /> Accepted
         </span>
       );
     case 'denied':
       return (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500">
-          ✗ Denied
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500">
+          <IconX className="w-3 h-3" stroke={2.5} /> Denied
         </span>
       );
     default:
       return (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-          ● Pending
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-700">
+          <IconPointFilled className="w-3 h-3" /> Pending
         </span>
       );
   }
@@ -53,10 +55,10 @@ function ImprovementEntry({ entry }: { entry: SuggestionEntry }) {
   const status = imp.status ?? 'pending';
 
   return (
-    <div className="border border-gray-200 rounded-lg p-2.5 bg-white">
+    <div className="border border-gray-200 rounded-xl p-2.5 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+          <span className="font-display text-[11px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md">
             Improvement
           </span>
           <span className="text-[10px] text-gray-400">{imp.category}</span>
@@ -70,7 +72,7 @@ function ImprovementEntry({ entry }: { entry: SuggestionEntry }) {
         <div className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-1 line-through">
           {imp.originalText}
         </div>
-        <div className="text-[11px] text-green-700 bg-green-50 rounded px-2 py-1">
+        <div className="text-[11px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
           {imp.newText}
         </div>
       </div>
@@ -84,16 +86,16 @@ function ModificationEntry({ entry }: { entry: SuggestionEntry }) {
   const status = mod.status ?? 'pending';
 
   const opColor = {
-    ADD: 'text-green-700 bg-green-50',
+    ADD: 'text-emerald-700 bg-emerald-50',
     UPDATE: 'text-indigo-700 bg-indigo-50',
     DELETE: 'text-red-700 bg-red-50',
   }[mod.operation];
 
   return (
-    <div className="border border-gray-200 rounded-lg p-2.5 bg-white">
+    <div className="border border-gray-200 rounded-xl p-2.5 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${opColor}`}>
+          <span className={`font-display text-[11px] px-1.5 py-0.5 rounded-md ${opColor}`}>
             {mod.operation}
           </span>
           <span className="text-[10px] text-gray-400">
@@ -112,7 +114,7 @@ function ModificationEntry({ entry }: { entry: SuggestionEntry }) {
           </div>
         )}
         {mod.newText && (mod.operation === 'ADD' || mod.operation === 'UPDATE') && (
-          <div className="text-[11px] text-green-700 bg-green-50 rounded px-2 py-1">
+          <div className="text-[11px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
             {mod.newText}
           </div>
         )}
@@ -165,15 +167,33 @@ export default function SuggestionsTimeline({ messages }: SuggestionsTimelinePro
     );
   }
 
+  const entryStatus = (e: SuggestionEntry) =>
+    e.improvement?.status ?? e.modification?.status ?? 'pending';
+  const pending = entries.filter((e) => entryStatus(e) === 'pending');
+  const resolved = entries.filter((e) => entryStatus(e) !== 'pending');
+
+  const resolvedChips = resolved.map((entry, idx) => ({
+    key: `${entry.messageId}-${entry.type}-${idx}`,
+    label: entry.type === 'improvement'
+      ? (entry.improvement!.category)
+      : `${entry.modification!.operation} ${entry.modification!.category}`,
+    accepted: entryStatus(entry) === 'accepted',
+  }));
+
   return (
     <div className="h-full overflow-y-auto p-3 space-y-2">
-      {entries.map((entry, idx) => (
+      {pending.map((entry, idx) => (
         entry.type === 'improvement' ? (
           <ImprovementEntry key={`${entry.messageId}-imp-${idx}`} entry={entry} />
         ) : (
           <ModificationEntry key={`${entry.messageId}-mod-${idx}`} entry={entry} />
         )
       ))}
+      {resolvedChips.length > 0 && (
+        <div className="pt-1">
+          <ResolvedSummary verb="Applied" noun="suggestion" items={resolvedChips} />
+        </div>
+      )}
     </div>
   );
 }
