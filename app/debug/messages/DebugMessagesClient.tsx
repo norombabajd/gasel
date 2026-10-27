@@ -1,10 +1,12 @@
 'use client';
 
-import Chat, { Message, Improvement, Modification } from '@/components/Chat';
+import Chat, { Message } from '@/components/Chat';
+import type { ChatSession } from '@/lib/chatStorage';
 import SuggestionsTimeline from '@/components/SuggestionsTimeline';
 import GACIODCard from '@/components/GACIODCard';
 import ChatSidebar from '@/components/ChatSidebar';
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   IconTarget,
   IconHelpCircle,
@@ -12,7 +14,6 @@ import {
   IconBulb,
   IconMessageCircle,
   IconFlagCheck,
-  IconChecklist,
   IconZoomQuestion,
   IconSparkles,
   IconCheck,
@@ -32,10 +33,12 @@ import {
 // Sample data for showcasing every UI element
 // ---------------------------------------------------------------------------
 
+const SAMPLE_NOW = Date.now();
+
 const sampleMessages: Message[] = [
   {
     id: 'user-1',
-    text: 'Review my GACIOD framework',
+    text: 'Review my GACIOD matrix',
     sender: 'user',
     timestamp: Date.now() - 300_000,
   },
@@ -51,7 +54,7 @@ const sampleMessages: Message[] = [
       '[Conflict]\nO-01: Strict skill-based matching is best\nG-02: Fast queue times\nStrict matching and speed are inherently at odds — this needs a resolution strategy.',
       '[Unclear]\nI-01: Use ELO rating system\nIt is unclear whether you mean classic Elo, Glicko-2, or a custom variant.',
       '[Incomplete]\nD-01: Use region-based matchmaking\nThis decision lacks detail about cross-region fallback behaviour.',
-    ].join('\n\n') + '\n\n---\n\n**Summary**\nYour framework has a strong foundation with measurable constraints. Key areas to address: define your skill metric, resolve the fairness-vs-speed tension, and flesh out decisions around edge cases.',
+    ].join('\n\n') + '\n\n---\n\n**Summary**\nYour matrix has a strong foundation with measurable constraints. Key areas to address: define your skill metric, resolve the fairness-vs-speed tension, and flesh out decisions around edge cases.',
     sender: 'assistant',
     timestamp: Date.now() - 290_000,
     isStructured: true,
@@ -70,7 +73,7 @@ const sampleMessages: Message[] = [
   },
   {
     id: 'user-2',
-    text: 'Suggest improvements for my GACIOD framework',
+    text: 'Suggest improvements for my GACIOD matrix',
     sender: 'user',
     timestamp: Date.now() - 260_000,
   },
@@ -105,13 +108,13 @@ const sampleMessages: Message[] = [
   },
   {
     id: 'user-3',
-    text: 'Generate items for my framework based on a matchmaking system',
+    text: 'Generate items for my matrix based on a matchmaking system',
     sender: 'user',
     timestamp: Date.now() - 240_000,
   },
   {
     id: 'assistant-modifications',
-    text: "I'll populate your framework with relevant items:",
+    text: "I'll populate your matrix with relevant items:",
     sender: 'assistant',
     timestamp: Date.now() - 230_000,
     modifications: [
@@ -175,7 +178,7 @@ const sampleGACIOD = {
   decisions: 'Use region-based matchmaking\nImplement seasonal resets\nAllow cross-play opt-in',
 };
 
-const sampleSessions = [
+const sampleSessions: ChatSession[] = [
   { id: '1', title: 'Matchmaking Algorithm Design', messages: sampleMessages, content: { title: 'Matchmaking Algorithm Design', ...sampleGACIOD }, context: '', createdAt: Date.now() - 86400000, updatedAt: Date.now() - 1000 },
   { id: '2', title: 'Authentication Flow Review', messages: [], content: { title: 'Authentication Flow Review', goals: '', assumptions: '', constraints: '', ideas: '', opinions: '', decisions: '' }, context: '', createdAt: Date.now() - 172800000, updatedAt: Date.now() - 86400000 },
   { id: '3', title: 'Database Schema Planning', messages: [], content: { title: 'Database Schema Planning', goals: '', assumptions: '', constraints: '', ideas: '', opinions: '', decisions: '' }, context: '', createdAt: Date.now() - 259200000, updatedAt: Date.now() - 172800000 },
@@ -193,11 +196,19 @@ export default function DebugMessagesClient() {
   return (
     <div className="min-h-screen bg-[#E8EDF2]">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="font-display text-2xl tracking-tight text-gray-900">Debug: Chat UI/UX Elements</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          All interactive chat components rendered with sample data. No API calls are made.
-        </p>
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl tracking-tight text-gray-900">Debug: Chat UI/UX Elements</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            All interactive chat components rendered with sample data. No API calls are made.
+          </p>
+        </div>
+        <Link
+          href="/debug"
+          className="shrink-0 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 flex items-center gap-1.5 text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium"
+        >
+          ← Debug menu
+        </Link>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
@@ -208,7 +219,7 @@ export default function DebugMessagesClient() {
         <section>
           <SectionHeader
             title="Chat Component"
-            description="The full Chat component with all message types: user, assistant (plain + markdown), system, structured feedback, improvements, and modifications."
+            description="The full Chat component with all message types: user, assistant (plain + markdown), system, structured feedback, improvements, and modifications. The Summary card at the end of structured feedback only appears for typed requests — quick-action responses omit it."
           />
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-[700px] overflow-hidden">
             <Chat
@@ -221,7 +232,7 @@ export default function DebugMessagesClient() {
               onDenyImprovement={(msgId, idx) => console.log('[debug] deny improvement:', msgId, idx)}
               onAcceptModification={(mod) => console.log('[debug] accept modification:', mod)}
               onDenyModification={(msgId, idx) => console.log('[debug] deny modification:', msgId, idx)}
-              showActionsInline={true}
+              onReviseModification={(msgId, idx, newText) => console.log('[debug] revise modification:', msgId, idx, newText)}
             />
           </div>
         </section>
@@ -237,13 +248,12 @@ export default function DebugMessagesClient() {
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-48 overflow-hidden">
             <Chat
               messages={[
-                { id: 'u-loading', text: 'Find gaps in my GACIOD framework', sender: 'user', timestamp: Date.now() },
+                { id: 'u-loading', text: 'Find gaps in my GACIOD matrix', sender: 'user', timestamp: SAMPLE_NOW },
               ]}
               onSendMessage={() => {}}
               inputValue=""
               setInputValue={() => {}}
               isLoading={true}
-              showActionsInline={false}
             />
           </div>
         </section>
@@ -263,7 +273,6 @@ export default function DebugMessagesClient() {
               inputValue=""
               setInputValue={() => {}}
               isLoading={false}
-              showActionsInline={true}
             />
           </div>
         </section>
@@ -372,7 +381,7 @@ export default function DebugMessagesClient() {
         <section>
           <SectionHeader
             title="Modification Cards"
-            description="ADD, UPDATE, and DELETE modification cards with their distinct visual styles and status badges."
+            description="ADD, UPDATE, and DELETE modification cards with their distinct visual styles and status badges. ADD and UPDATE offer a Revise action to edit the proposed text inline before applying; DELETE has nothing to revise."
           />
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -393,6 +402,7 @@ export default function DebugMessagesClient() {
                   </div>
                   <div className="flex gap-2">
                     <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200"><IconPencil className="w-3.5 h-3.5" stroke={2} />Revise</button>
                     <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                   </div>
                 </div>
@@ -420,6 +430,7 @@ export default function DebugMessagesClient() {
                   </div>
                   <div className="flex gap-2">
                     <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg"><IconCheck className="w-3.5 h-3.5" stroke={2} />Accept</button>
+                    <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200"><IconPencil className="w-3.5 h-3.5" stroke={2} />Revise</button>
                     <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200"><IconX className="w-3.5 h-3.5" stroke={2} />Deny</button>
                   </div>
                 </div>
@@ -568,7 +579,7 @@ export default function DebugMessagesClient() {
           />
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 h-96 overflow-hidden flex">
             <ChatSidebar
-              sessions={sampleSessions as any}
+              sessions={sampleSessions}
               activeSessionId="1"
               onNewChat={() => console.log('[debug] new chat')}
               onSelectSession={(id) => console.log('[debug] select session:', id)}
@@ -589,21 +600,17 @@ export default function DebugMessagesClient() {
         <section>
           <SectionHeader
             title="Quick Action Buttons"
-            description="The three shortcut buttons below the chat input: Review, Gaps, Improve."
+            description="The two full-width shortcut buttons above the chat input: Critique and Suggest. Responses triggered by these skip the Summary card."
           />
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-gray-200 p-6">
-            <div className="grid grid-cols-3 gap-1.5 max-w-md">
-              <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <IconChecklist className="w-3.5 h-3.5 text-blue-600 shrink-0" stroke={2} />
-                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Review</span>
+            <div className="flex gap-1.5 max-w-md">
+              <button className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                <IconZoomQuestion className="w-3.5 h-3.5" stroke={1.75} />
+                Critique
               </button>
-              <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <IconZoomQuestion className="w-3.5 h-3.5 text-orange-600 shrink-0" stroke={2} />
-                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Gaps</span>
-              </button>
-              <button className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all flex items-center justify-center gap-1.5">
-                <IconSparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" stroke={2} />
-                <span className="font-display text-xs text-gray-600 whitespace-nowrap">Improve</span>
+              <button className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                <IconSparkles className="w-3.5 h-3.5" stroke={1.75} />
+                Suggest
               </button>
             </div>
           </div>
@@ -680,7 +687,7 @@ export default function DebugMessagesClient() {
             <div className="border-t border-gray-100 p-2">
               <div className="flex gap-2">
                 <textarea
-                  defaultValue="Review my GACIOD framework"
+                  defaultValue="Review my GACIOD matrix"
                   className="flex-1 resize-none border border-gray-200 rounded-lg px-3 py-2 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent bg-gray-50"
                   rows={1}
                   readOnly

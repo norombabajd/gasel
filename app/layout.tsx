@@ -24,7 +24,7 @@ const calSans = Cal_Sans({
 
 export const metadata: Metadata = {
   title: "Gasel",
-  description: "GACIOD Framework Assistant",
+  description: "GACIOD Matrix Assistant",
 };
 
 export default function RootLayout({
