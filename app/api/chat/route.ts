@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { neonAuth } from '@neondatabase/auth/next/server';
+import { traceChatTurn, CHAT_MODEL, type ChatTurnResult } from '@/lib/judgment';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -247,109 +248,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { messages, gacIODContext, formattedGACIOD, additionalContext, phase, step, background } = await req.json();
+    const body = (await req.json()) as ChatRequestBody;
+    const { messages, gacIODContext, formattedGACIOD, sessionId, phase, step } = body;
 
-    const isOnboarding = phase === 'onboarding';
-    const baseContext = buildBaseContext(gacIODContext, formattedGACIOD, additionalContext);
-    const systemPrompt = isOnboarding
-      ? buildOnboardingPrompt(step || 'topic', background ?? additionalContext, formattedGACIOD)
-      : buildSystemPrompt(baseContext);
+    const result = await traceChatTurn(
+      {
+        student: { id: user.id, name: user.name, email: user.email },
+        sessionId: typeof sessionId === 'string' ? sessionId : null,
+        phase: phase === 'onboarding' ? 'onboarding' : 'workspace',
+        onboardingStep: phase === 'onboarding' ? step || 'topic' : null,
+        messages: Array.isArray(messages) ? messages : [],
+        topic: gacIODContext?.title ?? null,
+        formattedGACIOD: formattedGACIOD ?? null,
+      },
+      () => runChatTurn(body),
+    );
 
-    const systemMessage = {
-      role: 'system' as const,
-      content: systemPrompt,
-    };
-
-    // Convert messages to OpenAI format
-    const openAIMessages = [
-      systemMessage,
-      ...messages.map((msg: any) => ({
-        role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.text,
-      })),
-    ];
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-5-mini-2025-08-07',
-      messages: openAIMessages,
-      max_completion_tokens: 16000,
-      response_format: { type: 'json_object' },
-    });
-
-    const assistantMessage = completion.choices[0].message.content;
-
-    // Always log the raw ChatGPT response for debugging
-    console.log('[ChatGPT Response]', JSON.stringify({
-      content: assistantMessage,
-      finishReason: completion.choices[0].finish_reason,
-      usage: completion.usage,
-    }, null, 2));
-
-    if (!assistantMessage) {
-      console.error('OpenAI returned empty content. Finish reason:', completion.choices[0].finish_reason);
-      return NextResponse.json({
-        mode: 'insightful',
-        message: 'I received your request but could not generate a response. Please try again.',
-        feedback: [],
-        modifications: [],
-        improvements: [],
-        summary: '',
-      });
-    }
-
-    let parsedResponse: any;
-    try {
-      parsedResponse = JSON.parse(assistantMessage);
-    } catch (e) {
-      console.error('Failed to parse JSON response:', e);
-      // Return the raw text as a conversational message
-      return NextResponse.json({
-        mode: 'insightful',
-        message: assistantMessage,
-        feedback: [],
-        modifications: [],
-        improvements: [],
-        summary: '',
-      });
-    }
-
-    // Onboarding phase — return the staged onboarding shape
-    if (isOnboarding) {
-      const validSteps = ['topic', 'offer_walkthrough', 'walkthrough', 'done'];
-      const nextStep = validSteps.includes(parsedResponse.step) ? parsedResponse.step : (step || 'topic');
-      const onboardingMods = nextStep === 'walkthrough' && Array.isArray(parsedResponse.modifications)
-        ? parsedResponse.modifications.filter(
-            (m: { operation?: string; category?: string } | null) =>
-              !!m && m.operation === 'ADD' &&
-              ['goals', 'assumptions', 'constraints'].includes(m.category ?? ''),
-          )
-        : [];
-      return NextResponse.json({
-        mode: 'onboarding',
-        step: nextStep,
-        message: parsedResponse.message || '',
-        topic: typeof parsedResponse.topic === 'string' ? parsedResponse.topic : null,
-        background: typeof parsedResponse.background === 'string' ? parsedResponse.background : null,
-        modifications: onboardingMods,
-        feedback: [],
-        improvements: [],
-        summary: '',
-        usage: completion.usage,
-      });
-    }
-
-    // Normalize the response — ensure all fields exist
-    const response = {
-      mode: parsedResponse.mode || 'insightful',
-      message: parsedResponse.message || '',
-      feedback: Array.isArray(parsedResponse.feedback) ? parsedResponse.feedback : [],
-      modifications: Array.isArray(parsedResponse.modifications) ? parsedResponse.modifications : [],
-      improvements: Array.isArray(parsedResponse.improvements) ? parsedResponse.improvements : [],
-      summary: parsedResponse.summary || '',
-      usage: completion.usage,
-    };
-
-    return NextResponse.json(response);
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error: any) {
     console.error('OpenAI API error:', error);
     return NextResponse.json(
@@ -357,4 +272,122 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+interface ChatRequestBody {
+  messages: Array<{ sender?: string; text?: string }>;
+  gacIODContext?: Record<string, string>;
+  formattedGACIOD?: string;
+  additionalContext?: string;
+  phase?: string;
+  step?: string;
+  background?: string;
+  sessionId?: string;
+}
+
+async function runChatTurn(body: ChatRequestBody): Promise<ChatTurnResult> {
+  const ok = (b: Record<string, unknown>): ChatTurnResult => ({ status: 200, body: b });
+  const { messages, gacIODContext, formattedGACIOD, additionalContext, phase, step, background } = body;
+
+  const isOnboarding = phase === 'onboarding';
+  const baseContext = buildBaseContext(gacIODContext, formattedGACIOD, additionalContext);
+  const systemPrompt = isOnboarding
+    ? buildOnboardingPrompt(step || 'topic', background ?? additionalContext, formattedGACIOD)
+    : buildSystemPrompt(baseContext);
+
+  const systemMessage = {
+    role: 'system' as const,
+    content: systemPrompt,
+  };
+
+  // Convert messages to OpenAI format
+  const openAIMessages = [
+    systemMessage,
+    ...messages.map((msg: any) => ({
+      role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+      content: msg.text,
+    })),
+  ];
+
+  const completion = await openai.chat.completions.create({
+    model: CHAT_MODEL,
+    messages: openAIMessages,
+    max_completion_tokens: 16000,
+    response_format: { type: 'json_object' },
+  });
+
+  const assistantMessage = completion.choices[0].message.content;
+
+  // Always log the raw ChatGPT response for debugging
+  console.log('[ChatGPT Response]', JSON.stringify({
+    content: assistantMessage,
+    finishReason: completion.choices[0].finish_reason,
+    usage: completion.usage,
+  }, null, 2));
+
+  if (!assistantMessage) {
+    console.error('OpenAI returned empty content. Finish reason:', completion.choices[0].finish_reason);
+    return ok({
+      mode: 'insightful',
+      message: 'I received your request but could not generate a response. Please try again.',
+      feedback: [],
+      modifications: [],
+      improvements: [],
+      summary: '',
+    });
+  }
+
+  let parsedResponse: any;
+  try {
+    parsedResponse = JSON.parse(assistantMessage);
+  } catch (e) {
+    console.error('Failed to parse JSON response:', e);
+    // Return the raw text as a conversational message
+    return ok({
+      mode: 'insightful',
+      message: assistantMessage,
+      feedback: [],
+      modifications: [],
+      improvements: [],
+      summary: '',
+    });
+  }
+
+  // Onboarding phase — return the staged onboarding shape
+  if (isOnboarding) {
+    const validSteps = ['topic', 'offer_walkthrough', 'walkthrough', 'done'];
+    const nextStep = validSteps.includes(parsedResponse.step) ? parsedResponse.step : (step || 'topic');
+    const onboardingMods = nextStep === 'walkthrough' && Array.isArray(parsedResponse.modifications)
+      ? parsedResponse.modifications.filter(
+          (m: { operation?: string; category?: string } | null) =>
+            !!m && m.operation === 'ADD' &&
+            ['goals', 'assumptions', 'constraints'].includes(m.category ?? ''),
+        )
+      : [];
+    return ok({
+      mode: 'onboarding',
+      step: nextStep,
+      message: parsedResponse.message || '',
+      topic: typeof parsedResponse.topic === 'string' ? parsedResponse.topic : null,
+      background: typeof parsedResponse.background === 'string' ? parsedResponse.background : null,
+      modifications: onboardingMods,
+      feedback: [],
+      improvements: [],
+      summary: '',
+      usage: completion.usage,
+    });
+  }
+
+  // Normalize the response — ensure all fields exist
+  const response = {
+    mode: parsedResponse.mode || 'insightful',
+    message: parsedResponse.message || '',
+    feedback: Array.isArray(parsedResponse.feedback) ? parsedResponse.feedback : [],
+    modifications: Array.isArray(parsedResponse.modifications) ? parsedResponse.modifications : [],
+    improvements: Array.isArray(parsedResponse.improvements) ? parsedResponse.improvements : [],
+    summary: parsedResponse.summary || '',
+    usage: completion.usage,
+  };
+
+  return ok(response);
 }

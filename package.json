@@ -13,6 +13,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@tabler/icons-react": "^3.44.0",
     "drizzle-orm": "^0.45.1",
+    "judgeval": "^1.5.0",
     "next": "16.1.1",
     "openai": "^6.16.0",
     "react": "19.2.3",
