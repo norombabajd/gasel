@@ -751,6 +751,7 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...priorMessages, newMessage],
+          sessionId: activeSessionId || undefined,
           phase: 'onboarding',
           step: onboardStep,
           background: pendingContext ?? context,
@@ -893,6 +894,7 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
           gacIODContext: content,
           formattedGACIOD,
           additionalContext: context,
+          sessionId: activeSessionId || undefined,
         }),
       });
 
