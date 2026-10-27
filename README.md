@@ -4,7 +4,7 @@
 
 A research project on AI, Creativity, and design decision making at the University of California, Irvine. 
 
-Gasel guides students through structured software-design analysis using Generative AI & the GACIOD Framework, created by Andre van der Hoek for the use of teaching Software Design I at UC Irvine. GACIOD stands for Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions.
+Gasel guides students through structured software-design analysis using Generative AI & the GACIOD Matrix, created by Andre van der Hoek for the use of teaching Software Design I at UC Irvine. GACIOD stands for Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions.
 
 ## Tech Stack
 

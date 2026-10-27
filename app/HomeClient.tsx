@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback, useTransition, useRef, forwardRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useTransition, useRef } from 'react';
 import GACIODCard, { formatForAI, type AccentColor } from '@/components/GACIODCard';
 import Chat, { Message, Improvement, Modification } from '@/components/Chat';
 import ChatSidebar from '@/components/ChatSidebar';
+import AutoTextarea from '@/components/AutoTextarea';
 import { authClient } from '@/lib/auth/client';
 import {
   IconTarget,
@@ -12,15 +13,12 @@ import {
   IconBulb,
   IconMessageCircle,
   IconFlagCheck,
-  IconChecklist,
   IconZoomQuestion,
   IconSparkles,
   IconShare3,
   IconNotes,
   IconMessages,
-  IconPencil,
   type TablerIcon,
-  IconCheck,
 } from '@tabler/icons-react';
 import {
   createSession as createDbSession,
@@ -120,38 +118,6 @@ function fireConfetti() {
   setTimeout(() => container.remove(), 5000);
 }
 
-// A single-line-styled textarea that wraps and grows with its content (no clipping).
-const AutoTextarea = forwardRef<HTMLTextAreaElement, {
-  value: string;
-  onChange: (value: string) => void;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  placeholder?: string;
-  className?: string;
-}>(function AutoTextarea({ value, onChange, onKeyDown, placeholder, className }, forwardedRef) {
-  const innerRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-  return (
-    <textarea
-      ref={(node) => {
-        innerRef.current = node;
-        if (typeof forwardedRef === 'function') forwardedRef(node);
-        else if (forwardedRef) forwardedRef.current = node;
-      }}
-      rows={1}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      placeholder={placeholder}
-      className={`resize-none ${className ?? ''}`}
-    />
-  );
-});
-
 function emptyContent(): GACIODContent {
   return {
     title: '',
@@ -245,7 +211,6 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
   const [pendingContext, setPendingContext] = useState<string | null>(null);
   type OnboardStep = 'topic' | 'offer_walkthrough' | 'walkthrough' | 'done';
   const [onboardStep, setOnboardStep] = useState<OnboardStep>('topic');
-  const [openCountdown, setOpenCountdown] = useState<number | null>(null);
   const onboardingInit = useRef(false);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -538,7 +503,8 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     );
   };
 
-  const handleAcceptModification = (modification: Modification) => {
+  // Apply a modification's change to the matrix content (shared by accept and revise).
+  const applyModificationToContent = (modification: Modification) => {
     const category = modification.category as keyof GACIODContent;
 
     // Use functional update to avoid stale closure over content
@@ -599,6 +565,11 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
       }
       return prev;
     });
+  };
+
+  const handleAcceptModification = (modification: Modification) => {
+    const category = modification.category as keyof GACIODContent;
+    applyModificationToContent(modification);
 
     // Always mark the modification status, even if content application failed
     // Use a flag to only mark the first matching pending modification
@@ -641,6 +612,32 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
             idx === modificationIndex
               ? { ...mod, status: 'denied' as const }
               : mod,
+          );
+          return { ...msg, modifications: newModifications };
+        }
+        return msg;
+      }),
+    );
+  };
+
+  // Apply a modification with user-edited text, marking it accepted with the revised text.
+  const handleReviseModification = (
+    messageId: string,
+    modificationIndex: number,
+    newText: string,
+  ) => {
+    const mod = messages.find((m) => m.id === messageId)?.modifications?.[modificationIndex];
+    if (!mod || !newText.trim()) return;
+
+    applyModificationToContent({ ...mod, newText });
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id === messageId && msg.modifications) {
+          const newModifications = msg.modifications.map((m, idx) =>
+            idx === modificationIndex
+              ? { ...m, newText, status: 'accepted' as const }
+              : m,
           );
           return { ...msg, modifications: newModifications };
         }
@@ -820,7 +817,7 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     const intro: Message = {
       id: `${Date.now()}-intro`,
       text:
-        "Your workspace is open. The GACIOD matrix gives you six cards to structure your thinking — Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions. Fill them in yourself, or ask me anytime to populate a section, review your framework, find gaps, or suggest improvements.",
+        "Your workspace is open. The GACIOD matrix gives you six cards to structure your thinking — Goals, Assumptions, Constraints, Ideas, Opinions, and Decisions. Fill them in yourself, or ask me anytime to populate a section, critique your matrix, find gaps, or suggest improvements.",
       sender: 'assistant',
       timestamp: Date.now(),
     };
@@ -848,29 +845,6 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     });
   };
 
-  // Always call the latest openWorkspace from the auto-open timer (avoids stale closure).
-  const openWorkspaceRef = useRef(openWorkspace);
-  openWorkspaceRef.current = openWorkspace;
-
-  // When onboarding reaches "done", count down from 3s and auto-open the workspace.
-  useEffect(() => {
-    if (onboarded || onboardStep !== 'done') {
-      setOpenCountdown(null);
-      return;
-    }
-    setOpenCountdown(3);
-    const interval = setInterval(() => {
-      setOpenCountdown((c) => (c === null ? null : Math.max(0, c - 1)));
-    }, 1000);
-    const timer = setTimeout(() => {
-      openWorkspaceRef.current();
-    }, 3000);
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timer);
-    };
-  }, [onboarded, onboardStep]);
-
   // Skip onboarding straight to the workspace (advanced users).
   const skipToWorkspace = () => {
     setOnboarded(true);
@@ -884,7 +858,10 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
     });
   };
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (
+    text: string,
+    opts?: { quickAction?: boolean },
+  ) => {
     if (!onboarded) {
       await handleOnboardingMessage(text);
       return;
@@ -1003,7 +980,9 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
           })
           .join('\n\n');
 
-        displayText = data.summary
+        // Quick actions (Critique/Suggest) skip the Summary card — the feedback
+        // items stand on their own there.
+        displayText = data.summary && !opts?.quickAction
           ? feedbackText + `\n\n---\n\n**Summary**\n${data.summary}`
           : feedbackText;
       }
@@ -1150,7 +1129,7 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
                   isLoading={isLoading}
                   onAcceptModification={handleAcceptModification}
                   onDenyModification={handleDenyModification}
-                  showActionsInline={false}
+                  onReviseModification={handleReviseModification}
                   showInput={true}
                   inputPlaceholder="Reply to Gazelle..."
                 />
@@ -1166,19 +1145,12 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
                 Skip to workspace →
               </button>
               {onboardStep === 'done' && (
-                <div className="flex items-center gap-3">
-                  {openCountdown !== null && (
-                    <span className="text-xs font-medium text-gray-400">
-                      Opening in {openCountdown}s…
-                    </span>
-                  )}
-                  <button
-                    onClick={openWorkspace}
-                    className="bg-gray-900 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-gray-800 transition-colors"
-                  >
-                    Open workspace →
-                  </button>
-                </div>
+                <button
+                  onClick={openWorkspace}
+                  className="bg-gray-900 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-gray-800 transition-colors"
+                >
+                  Open workspace →
+                </button>
               )}
             </div>
           </div>
@@ -1267,34 +1239,25 @@ export default function HomeClient({ initialSessions }: HomeClientProps) {
                   onDenyImprovement={handleDenyImprovement}
                   onAcceptModification={handleAcceptModification}
                   onDenyModification={handleDenyModification}
-                  showActionsInline={false}
+                  onReviseModification={handleReviseModification}
                   showInput={true}
                   inputPlaceholder="Chat here..."
                   aboveInput={(
-                    <div className="flex flex-wrap gap-1.5 mb-4 justify-between">
+                    <div className="flex gap-1.5 mb-4">
                       <button
-                        onClick={() => handleSendMessage('Review my GACIOD framework')}
+                        onClick={() => handleSendMessage('Critique my GACIOD matrix', { quickAction: true })}
                         disabled={isLoading}
-                        title="Review"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                      >
-                        <IconChecklist className="w-3.5 h-3.5" stroke={1.75} />
-                        Review
-                      </button>
-                      <button
-                        onClick={() => handleSendMessage('Critique my GACIOD framework')}
-                        disabled={isLoading}
-                        title="Critique — Gazelle hunts for gaps, conflicts, and unclear or missing items across your framework."
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        title="Critique — Gazelle hunts for gaps, conflicts, and unclear or missing items across your matrix."
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
                       >
                         <IconZoomQuestion className="w-3.5 h-3.5" stroke={1.75} />
                         Critique
                       </button>
                       <button
-                        onClick={() => handleSendMessage('Suggest improvements for my GACIOD framework')}
+                        onClick={() => handleSendMessage('Suggest improvements for my GACIOD matrix', { quickAction: true })}
                         disabled={isLoading}
-                        title="Suggest — Gazelle proposes concrete edits to strengthen existing items, which you can accept or deny."
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                        title="Suggest — Gazelle proposes concrete edits to strengthen existing items, which you can accept, revise, or deny."
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-full bg-[#1F2937] text-white text-sm font-medium hover:bg-[#F3F4F6] hover:text-black transition-colors disabled:opacity-50 shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
                       >
                         <IconSparkles className="w-3.5 h-3.5" stroke={1.75} />
                         Suggest

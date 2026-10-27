@@ -21,8 +21,6 @@ import {
   IconTrash,
   IconCheck,
   IconX,
-  IconChecklist,
-  IconZoomQuestion,
   type TablerIcon,
 } from '@tabler/icons-react';
 
@@ -272,11 +270,18 @@ function ModificationCard({
   modification,
   onAccept,
   onDeny,
+  onRevise,
 }: {
   modification: Modification;
   onAccept: (modification: Modification) => void;
   onDeny: () => void;
+  onRevise?: (newText: string) => void;
 }) {
+  const [isRevising, setIsRevising] = useState(false);
+  const [revisedText, setRevisedText] = useState(modification.newText ?? '');
+  // Revising only makes sense when there is proposed text to edit.
+  const canRevise = !!onRevise && modification.operation !== 'DELETE' && !!modification.newText;
+
   const getOperationHeaderColor = () => {
     switch (modification.operation) {
       case 'ADD':
@@ -336,7 +341,7 @@ function ModificationCard({
                   </div>
                 </div>
               )}
-              {modification.newText && (
+              {modification.newText && !isRevising && (
                 <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
                   <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Replace with</span>
                   <div className="text-emerald-950 font-normal mt-1 leading-relaxed">
@@ -347,7 +352,7 @@ function ModificationCard({
             </>
           )}
 
-          {modification.operation === 'ADD' && modification.newText && (
+          {modification.operation === 'ADD' && modification.newText && !isRevising && (
             <div className="bg-emerald-50 border-l-3 border-emerald-500 rounded-r p-2.5">
               <span className="text-[10px] font-semibold text-emerald-900 uppercase tracking-wide">Add</span>
               <div className="text-emerald-950 font-normal mt-1 leading-relaxed">
@@ -355,25 +360,70 @@ function ModificationCard({
               </div>
             </div>
           )}
+
+          {isRevising && (
+            <div className="bg-indigo-50 border-l-3 border-indigo-400 rounded-r p-2.5">
+              <span className="text-[10px] font-semibold text-indigo-900 uppercase tracking-wide">Your revision</span>
+              <textarea
+                value={revisedText}
+                onChange={(e) => setRevisedText(e.target.value)}
+                rows={3}
+                autoFocus
+                className="w-full mt-1 resize-none border border-indigo-200 rounded-lg px-2 py-1.5 text-sm font-normal leading-relaxed bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => onAccept(modification)}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-        >
-          <IconCheck className="w-3.5 h-3.5" stroke={2} />
-          Accept
-        </button>
-        <button
-          onClick={onDeny}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
-        >
-          <IconX className="w-3.5 h-3.5" stroke={2} />
-          Deny
-        </button>
-      </div>
+      {isRevising ? (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onRevise!(revisedText.trim())}
+            disabled={!revisedText.trim()}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <IconCheck className="w-3.5 h-3.5" stroke={2} />
+            Apply revision
+          </button>
+          <button
+            onClick={() => {
+              setIsRevising(false);
+              setRevisedText(modification.newText ?? '');
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
+          >
+            <IconX className="w-3.5 h-3.5" stroke={2} />
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onAccept(modification)}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            <IconCheck className="w-3.5 h-3.5" stroke={2} />
+            Accept
+          </button>
+          {canRevise && (
+            <button
+              onClick={() => setIsRevising(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors"
+            >
+              <IconPencil className="w-3.5 h-3.5" stroke={2} />
+              Revise
+            </button>
+          )}
+          <button
+            onClick={onDeny}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
+          >
+            <IconX className="w-3.5 h-3.5" stroke={2} />
+            Deny
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -458,7 +508,7 @@ interface ChatProps {
   onDenyImprovement?: (messageId: string, improvementIndex: number) => void;
   onAcceptModification?: (modification: Modification) => void;
   onDenyModification?: (messageId: string, modificationIndex: number) => void;
-  showActionsInline?: boolean;
+  onReviseModification?: (messageId: string, modificationIndex: number, newText: string) => void;
   showInput?: boolean;
   inputPlaceholder?: string;
   /** Optional node rendered at the end of the scrollable message area (e.g. a suggested-topic card). */
@@ -479,7 +529,7 @@ export default function Chat({
   onDenyImprovement,
   onAcceptModification,
   onDenyModification,
-  showActionsInline = true,
+  onReviseModification,
   showInput = true,
   inputPlaceholder = 'Type a message...',
   footer,
@@ -657,6 +707,11 @@ export default function Chat({
                           modification={modification}
                           onAccept={onAcceptModification!}
                           onDeny={() => onDenyModification!(message.id, idx)}
+                          onRevise={
+                            onReviseModification
+                              ? (newText) => onReviseModification(message.id, idx, newText)
+                              : undefined
+                          }
                         />
                       ))}
                       {resolved.length > 0 && (
@@ -738,42 +793,6 @@ export default function Chat({
             {isLoading ? '...' : 'Send'}
           </button>
         </div>
-
-        {/* Quick action cards - only show if showActionsInline is true */}
-        {/* {showActionsInline && (
-          <div className="grid grid-cols-3 gap-1.5 mt-3">
-            <button
-              onClick={() => {
-                onSendMessage('Review my GACIOD framework');
-              }}
-              disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-            >
-              <IconChecklist className="w-3.5 h-3.5 text-blue-600 shrink-0" stroke={2} />
-              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Review</span>
-            </button>
-            <button
-              onClick={() => {
-                onSendMessage('Find gaps in my GACIOD framework');
-              }}
-              disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-            >
-              <IconZoomQuestion className="w-3.5 h-3.5 text-orange-600 shrink-0" stroke={2} />
-              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Gaps</span>
-            </button>
-            <button
-              onClick={() => {
-                onSendMessage('Suggest improvements for my GACIOD framework');
-              }}
-              disabled={isLoading}
-              className="bg-gray-50 border border-gray-200 rounded-lg py-2 hover:bg-gray-100 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-            >
-              <IconSparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" stroke={2} />
-              <span className="font-display text-xs text-gray-600 whitespace-nowrap">Improve</span>
-            </button>
-          </div>
-        )} */}
       </div>
       )}
     </div>

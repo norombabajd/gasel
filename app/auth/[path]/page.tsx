@@ -21,7 +21,7 @@ export default async function AuthPage({
               the <span className="font-display font-normal">gazelle</span> workspace
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Turn an idea into a plan with the GACIOD framework.
+              Turn an idea into a plan with the GACIOD matrix.
             </p>
           </div>
         </div>
